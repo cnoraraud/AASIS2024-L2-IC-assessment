@@ -1,0 +1,13 @@
+version: "0.1.1"
+date: "2024/10/03"
+paths:
+  main_data:
+    .: "<root dir>"
+    wavs: "<sub dir>"
+    eafs: "<sub dir>"
+    pfsxs: "<sub dir>"
+  personal_data:
+    .: "<root dir>"
+    wavs: "<sub dir>"
+    eafs: "<sub dir>"
+    pfsxs: "<sub dir>"

@@ -1,0 +1,12 @@
+name: l2ic
+channels:
+  - conda-forge
+dependencies:
+  - numpy
+  - pandas
+  - matplotlib
+  - pyyaml
+  - defusedxml
+  - pip
+  - pip:
+    - pympi-ling
