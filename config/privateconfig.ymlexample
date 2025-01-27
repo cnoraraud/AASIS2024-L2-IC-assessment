@@ -1,13 +1,15 @@
-version: "0.1.1"
-date: "2024/10/03"
+version: "0.1.3"
+date: "2024/12/09"
 paths:
   main_data:
     .: "<root dir>"
     wavs: "<sub dir>"
     eafs: "<sub dir>"
-    pfsxs: "<sub dir>"
+    csvs: "<sub dir>"
   personal_data:
     .: "<root dir>"
     wavs: "<sub dir>"
     eafs: "<sub dir>"
-    pfsxs: "<sub dir>"
+    npsz: "<sub dir>"
+    csvs: "<sub dir>"
+    special_data: "<sub dir>"

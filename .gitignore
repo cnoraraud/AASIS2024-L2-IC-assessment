@@ -2,7 +2,7 @@
 
 # Local directories
 [Ll]ocal/
-[Dd]ata/
+[Dd]ata*/
 [Cc]ache/
 [Cc]onfig/**
 [Ll]ogs/
@@ -27,6 +27,7 @@
 *.[Yy][Mm][Ll]
 *.[Cc][Ss][Vv]
 *.[Ee][Nn][Vv]
+*.[Nn][Pp][Zz]
 
 # Aalto files
 *.xlsx
@@ -72,7 +73,8 @@
 ![Cc]onfig/privateconfig.ymlexample
 
 ### JUPYTER NOTEBOOK
-.ipynb_checkpoints
+*.ipynb
+*.ipynb_checkpoints
 
 ### VISUAL STUDIO
 ## https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
