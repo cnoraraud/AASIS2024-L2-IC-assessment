@@ -28,9 +28,9 @@ def get_sample_dataframe():
 def get_speaker_dataframe():
     spc_path = iot.special_data_path()
     spc_csvs = iot.list_dir(spc_path,"csv")
-    unis = pd.read_csv(spc_path/spc_csvs[0],sep=";")
-    ratings = pd.read_csv(spc_path/spc_csvs[1],sep=";")
-    speaker_info = pd.read_csv(spc_path/spc_csvs[2],sep=";",encoding='latin-1')
+    unis = pd.read_csv(spc_path/'universities.csv',sep=";")
+    ratings = pd.read_csv(spc_path/'ratings.csv',sep=";")
+    speaker_info = pd.read_csv(spc_path/'consentquiz.csv',sep=";",encoding='latin-1')
     
     tasks = ratings["task"]
     just_ratings = ratings.drop(["task"], axis=1)
