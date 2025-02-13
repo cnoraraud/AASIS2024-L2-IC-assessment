@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import scipy.signal as sig
 import scipy.fft as fft
 import numpy as np
+import filtering as filt
 
 def stereo_to_mono(data):
     # For some audios, one of the channels might be usable for a noise profile
@@ -144,18 +145,14 @@ def get_filterbanks(power, fbank):
     filter_banks = 20 * np.log10(filter_banks)
     return filter_banks
 
-def ma(a, n) :
-    bg = np.mean(a)
-    return np.convolve(np.pad(a, (n//2, n - n//2 - 1), mode='constant', constant_values=(bg, bg)), np.ones(n), 'valid') / n
-
 def energy_to_vad(data):
-    dbs = DB(ma(data, 300))
+    dbs = DB(filt.ma(data, {"n": 300}))
     mean_db = np.mean(dbs)
     std_db = np.std(dbs)
     th_db = mean_db + std_db
     ms = 2000
     ms_th = 0.15
-    return ma(dbs > th_db, ms) > ms_th
+    return filt.ma(dbs > th_db, {"n": ms}) > ms_th
 
 def DB(data):
     return 20*np.log10(data)

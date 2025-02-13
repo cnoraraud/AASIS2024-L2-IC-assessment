@@ -63,6 +63,9 @@ def csvs_path():
 def npzs_path():
     return private_data_path("npzs")
 
+def npys_path():
+    return private_data_path("npys")
+
 def special_data_path():
     return private_data_path("special_data")
 

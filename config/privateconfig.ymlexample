@@ -11,5 +11,6 @@ paths:
     wavs: "<sub dir>"
     eafs: "<sub dir>"
     npsz: "<sub dir>"
+    npys: "<sub dir>"
     csvs: "<sub dir>"
     special_data: "<sub dir>"

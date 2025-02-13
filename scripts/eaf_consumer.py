@@ -130,7 +130,7 @@ def get_labels_for_tier(tier, tier_annotations):
     for t0, t1, string in tier_annotations:
         tokens_values_string = string
         if tier == "text":
-            tokens_values_string = find_text_tokens(sanitize_text(string), nontextual_tokens="count")
+            tokens_values_string = find_text_tokens(sanitize_text(string), textual_tokens="sum", nontextual_tokens="count")
         
         # This is dumb, I should pass a data structure
         tokens_values = tokens_values_string.split("+")

@@ -2,6 +2,9 @@ import numpy as np
 import io_tools as iot
 import math
 import sys
+import re
+import time
+import os
 
 def nothas(labels, sub):
     return np.char.find(np.array(labels), sub) == -1
@@ -9,18 +12,47 @@ def nothas(labels, sub):
 def has(labels, sub):
     return np.char.find(np.array(labels), sub) != -1
 
-def select_labels(data, labels, label_filter):
-    return data[label_filter, :], labels[label_filter]
+def resolve_atomic(labels, atomic):
+    negation = atomic[0]
+    sub = atomic[1]
+    if negation == "nothas":
+        return nothas(labels, sub)
+    if negation == "has":
+        return has(labels, sub)
+
+def resolve_conjunction(labels, conjunction_group):
+    select = resolve_atomic(labels, conjunction_group[0])
+    for i in range(1,len(conjunction_group)):
+        select = select & resolve_atomic(labels, conjunction_group[i])
+    return select
+
+def canonical_select(labels, conjunction_groups):
+    select = resolve_conjunction(labels, conjunction_groups[0])
+    for i in range(1, len(conjunction_groups)):
+        select = select | resolve_conjunction(labels, conjunction_groups[i])
+    return select
+
+def replace_labels(labels, sub, replacement):
+    return np.char.replace(np.array(labels), sub, replacement)
+
+def do_label_select(data, labels, label_select):
+    return data[label_select, :], labels[label_select]
 
 def reorder_data(data, labels):
     order = np.argsort(labels, stable='True')
     return data[order, :], labels[order]
 
-def select_time(data, time_filter):
-    return data[:, time_filter]
+def do_time_select(data, time_select):
+    return data[:, time_select]
 
 def append_labels(data, labels, new_data, new_labels):
     return np.concat([data, new_data]), np.concat([labels, new_labels])
+
+def focus_on_label(data, labels, label):
+    select_filter = has(labels, label)
+    time_filter = np.any(np.expand_dims(select_filter, axis=1) & ((data == 1)), axis=0)
+    new_data = do_time_select(data, time_filter)
+    return do_label_select(new_data, labels, ~select_filter)
 
 def pmean(d, p=1):
     # found out scipy has this after I wrote it
@@ -35,6 +67,33 @@ def pmean(d, p=1):
     else:
         dm = (np.sum(d**p, axis=0, keepdims=True)/n) ** (1/p)
     return dm, p
+
+def flatten_data(data, threshold=0.1, reverse=False):
+    flattened_data = np.zeros_like(data)
+    if not reverse:
+        flattened_data[data >= threshold] = 1
+    if reverse:
+        flattened_data[data <= threshold] = 1
+    return flattened_data
+
+def norm_data(data):
+    data_c = data - np.mean(data,axis=1, keepdims=True)
+    return data_c / np.max(np.abs(data_c),axis=1, keepdims=True)
+
+def find_speakers_from_name(name):
+    speakers = []
+    matches = re.findall(r"speaker\d{3}",name)
+    for match in matches:
+        speaker = match.replace("speaker","")
+        speakers.append(speaker)
+    return speakers
+
+def anonymize_speakers(labels, speakers):
+    new_labels = replace_labels(labels, speakers[0], "S1")
+    return replace_labels(new_labels, speakers[1], "S2")
+
+def double_speaker_filter(labels):
+    return ~(has(labels, "S1") & has(labels, "S2"))
 
 def write_DL(name, D, L):
     npzs_path = iot.npzs_path()
@@ -52,10 +111,20 @@ def print_npz():
     for name in npz_list():
         print(name)
 
+def read_DL_metadata_from_name(name):
+    if ".npz" not in name:
+        name = name + ".npz"
+    return read_DL_metadata(iot.npzs_path() / name)
+        
 def read_DL_from_name(name):
     if ".npz" not in name:
         name = name + ".npz"
     return read_DL(iot.npzs_path() / name)
+
+def read_DL_metadata(path):
+    name = path.stem
+    mtime = f"{time.ctime(os.path.getmtime(f"{path}"))}"
+    return name, mtime
 
 def read_DL(path):
     npz = np.load(path)

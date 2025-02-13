@@ -8,6 +8,8 @@ import numpy as np
 import wav_consumer as wc
 import csv_consumer as csvc
 import npz_reader as npzr
+import npy_reader as npy
+
 from collections import Counter
 
 def get_prints_data(key, row, wavs):
@@ -46,6 +48,10 @@ def create_all_DLs():
     res = iterate_through_data_provider(create_and_write_DLs)
     print(res)
 
+def analyze_all_npzs():
+    res = iterate_through_npz_provider(analyze_npz)
+    print(res)
+
 def create_DL(key, row, wavs):
     ms = wc.find_wavs_ms(wavs)
     extraction_data, extraction_labels = wc.wavs_to_ms(wavs, ms)
@@ -54,6 +60,15 @@ def create_DL(key, row, wavs):
     D = np.concatenate([extraction_data, annotation_data], axis=1).T
     L = np.concatenate([ec.sanitize_labels(extraction_labels, tag="(ext.)"), ec.sanitize_labels(annotation_labels, tag="(ann.)")])
     return D, L
+
+def do_all_processing():
+    print("Started creating DLs")
+    create_all_DLs()
+    print("Started adding joystick data")
+    write_joysticks_to_all_npzs()
+    print("Started analysing data")
+    analyze_all_npzs()
+    print("Finished processing")
 
 def get_display(key, row, wavs):
     D, L = create_DL(key, row, wavs)
@@ -64,11 +79,16 @@ def display_npz(name, D, L):
     dd.display_all(D, L, name)
     return [name]
 
+#TODO: Manifest this as well...
 def create_and_write_DLs(key, row, wavs):
     D, L = create_DL(key, row, wavs)
     filename = npzr.write_DL(key, D, L)
     return [filename]
-    
+
+def analyze_npz(name, D, L):
+    filename = npy.analyse_npz(name, D, L)
+    return [filename]
+
 def iterate_through_data_provider(method, n = math.inf, offset = 0):
     i = 0
     aggregate = []
