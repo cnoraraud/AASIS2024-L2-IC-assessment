@@ -6,6 +6,9 @@ import re
 import time
 import os
 
+SPEAKER1 = "S1"
+SPEAKER2 = "S2"
+
 def nothas(labels, sub):
     return np.char.find(np.array(labels), sub) == -1
 
@@ -89,11 +92,12 @@ def find_speakers_from_name(name):
     return speakers
 
 def anonymize_speakers(labels, speakers):
-    new_labels = replace_labels(labels, speakers[0], "S1")
-    return replace_labels(new_labels, speakers[1], "S2")
+    new_labels = replace_labels(labels, speakers[0], SPEAKER1)
+    new_labels = replace_labels(new_labels, speakers[1], SPEAKER2)
+    return new_labels
 
 def double_speaker_filter(labels):
-    return ~(has(labels, "S1") & has(labels, "S2"))
+    return ~(has(labels, SPEAKER1) & has(labels, SPEAKER2))
 
 def write_DL(name, D, L):
     npzs_path = iot.npzs_path()

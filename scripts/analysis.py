@@ -181,13 +181,13 @@ def group_analyses(L, *args):
 def count_lengths(list_of_a):
     counts = []
     for a in list_of_a:
-        counts.append(a.shape[0])
+        counts.append(count(a))
     return np.array(counts)
 
 def sum_lengths(list_of_a):
     sums = []
     for a in list_of_a:
-        sums.append(np.sum(a))
+        sums.append(sum_data(a))
     return np.array(sums)
 
 def valid(data):
@@ -195,14 +195,14 @@ def valid(data):
         return False
     return True
 
-def quantiles(data, q):
+def quantiles(data, q, method="linear"):
     if not valid(data):
         return None
-    return np.round(np.quantile(data, q=q))
+    return np.nanquantile(data, q=q, method=method)
 
 def group_arrays(arrays):
     if len(arrays) == 0:
-        return None
+        return np.empty()
     return np.concat(arrays, axis=0)
 
 def count(data):
@@ -217,8 +217,13 @@ def sum_data(data):
 
 def mean_data(data):
     if not valid(data):
-        return None
-    return np.mean(data)
+        return np.nan
+    return np.nanmean(data)
+
+def median_data(data):
+    if not valid(data):
+        return np.nan
+    return np.nanmedian(data)
 
 def summarize_analyses(L, analyses, q=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]):
     summaries = dict()
@@ -260,14 +265,20 @@ def summarize_analyses(L, analyses, q=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]):
             other_summary["label"] = label
             other_summary["valid"] = len(other_overlaps) > 0 or len(other_delays) > 0
             other_summary["other_label"] = other_label
+            other_summary["count_overlap"] = count(other_overlaps_all)
             other_summary["total_overlap"] = sum_data(other_overlaps_all)
             other_summary["mean_overlap"] = mean_data(other_overlaps_all)
+            other_summary["median_overlap"] = median_data(other_overlaps_all)
             other_summary["mean_delay"] = mean_data(other_delays_all)
+            other_summary["median_delay"] = median_data(other_delays_all)
             other_summary["mean_segment_overlap_ratio"] = mean_data(other_overlap_percentage)
+            other_summary["median_segment_overlap_ratio"] = median_data(other_overlap_percentage)
             other_summary["segment_overlap_count_quantiles"] = quantiles(overlap_counts, q)
             other_summary["segment_delay_count_quantiles"] = quantiles(delay_counts, q)
             other_summary["overlap_quantiles"] = quantiles(other_overlaps_all, q)
             other_summary["delay_quantiles"] = quantiles(other_delays_all, q)
+            other_summary["median_segment_overlap_count"] = median_data(overlap_counts)
+            other_summary["median_segment_delay_count"] = median_data(delay_counts)
             other_summary["pearson_corr"] = pearson_corrs[i]
             other_summary["spearman_corr"] = spearman_corrs[i]
             

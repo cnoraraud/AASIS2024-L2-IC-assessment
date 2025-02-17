@@ -7,7 +7,8 @@ import analysis as ana
 import numpy as np
 
 def analyse_npz(name, D, L):
-    L_anon = npzr.anonymize_speakers(L, npzr.find_speakers_from_name(name))
+    speakers = npzr.find_speakers_from_name(name)
+    L_anon = npzr.anonymize_speakers(L, speakers)
     L_filter = npzr.canonical_select(L_anon, [[("has","ann.")],[("has","energy")]]) & npzr.double_speaker_filter(L)
     D_s, L_anon = npzr.do_label_select(D, L_anon, L_filter)
     D_s, L_anon = npzr.focus_on_label(D_s, L_anon, "performance")
@@ -18,6 +19,7 @@ def analyse_npz(name, D, L):
     analyses = ana.group_analyses(L_anon, ond_analyses, mnw_analyses, corr_analyses)
     summary = ana.summarize_analyses(L_anon, analyses)
     summary["general"] = {"features": D.shape[0], "length": D.shape[1]}
+    summary["labels"] = L
     npys_path = iot.npys_path()
     with open(npys_path / "analysis_manifest.txt", "a") as manifest:
         today = datetime.now()
@@ -28,8 +30,14 @@ def analyse_npz(name, D, L):
         np.save(npy_name, summary) 
         manifest.write(f"{npz_name} ({modified}) => {npy_name} ({today})\n")
 
+def npy_list():
+    npys = []
+    for name in iot.list_dir(iot.npys_path(), "npy"):
+        npys.append(name)
+    return npys
 
 def load_analysis_from_name(name):
+    name = name.replace(".npz",".npy")
     if ".npz" not in name:
         name = name + ".npy"
     return load_analysis(iot.npys_path() / name)
