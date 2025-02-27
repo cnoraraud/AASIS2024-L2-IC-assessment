@@ -138,11 +138,12 @@ def read_row(eafpath, sr:int=None, do_wav = False):
     config = io_tools.get_config_private()
     personal_path = p.Path(config["paths"]["personal_data"]["."])
     wav_names = []
+    mp4_names = []
 
     # populate eaf
     try:
         eaf = elan.Eaf(eafpath)
-        wav_names = elan_tools.get_wav_names(eaf)
+        wav_names, mp4_names = elan_tools.get_wav_names(eaf)
     except:
         print(f"Could not read {eafpath}")
     

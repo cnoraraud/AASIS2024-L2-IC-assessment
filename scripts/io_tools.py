@@ -82,7 +82,9 @@ def source_annotated_data():
     
     with open(personal_path / "copy_manifest.txt", "a") as manifest:
         manifest.write(f"\nSTARTING copy {datetime.now()}\n")
-        manifest.write(f"\tCONFIG: version {config["version"]} from {config["date"]}\n")
+        version = config["version"]
+        date = config["date"]
+        manifest.write(f"\tCONFIG: version {version} from {date}\n")
         manifest.write(f"\tFROM: {aasis_path} TO: {personal_path}\n")
         good = 0
         new = 0
@@ -93,15 +95,21 @@ def source_annotated_data():
                 # find eaf
                 eaf_annotation = "_".join(annotation.split("_")[:-1])
                 eaf_src_choices = sorted(eafs_src_path.glob(f'**/{eaf_annotation}*.eaf'))
+                if len(eaf_src_choices) == 0:
+                    manifest.write(f"\t{annotation}: no eaf choices\n")
+
                 eaf_path = eaf_src_choices[get_choice]
                 # find wavs
-                wav_names = elan_tools.get_wav_names(elan.Eaf(eaf_path))
+                wav_names, mp4_names = elan_tools.get_wav_names(elan.Eaf(eaf_path))
                 wavs = []
                 for wav_name in wav_names:
                     if not p.Path(wavs_dst_path / wav_name).exists():
                         wav_src_choices = sorted(wavs_src_path.glob(f'**/{wav_name}')) # lazy
-                        wav = wav_src_choices[get_choice]
-                        wavs.append(wav)
+                        if len(wav_src_choices) > 0:
+                            wav = wav_src_choices[get_choice]
+                            wavs.append(wav)
+                        else:
+                            manifest.write(f"\t{annotation}: wav {wav_name} not found\n")
                 # find csvs possibilities
                 csv_names = get_csv_names_joystick(eaf_annotation)
                 csvs = []
@@ -111,6 +119,9 @@ def source_annotated_data():
                         if len(csv_src_choices) > 0:
                             csv = csv_src_choices[get_choice]
                             csvs.append(csv)
+                        else:
+                            pass
+                            #manifest.write(f"\t{annotation}: csv {csv_name} not found\n")
 
                 # copy
                 updated = 0

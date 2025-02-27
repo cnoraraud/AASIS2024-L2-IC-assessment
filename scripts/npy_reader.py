@@ -14,12 +14,14 @@ def analyse_npz(name, D, L):
     D_s, L_anon = npzr.focus_on_label(D_s, L_anon, "performance")
     Dflat = npzr.flatten_data(D_s)
     ond_analyses = ana.get_all_segment_overlaps_and_delays(L_anon,Dflat)
-    mnw_analyses = ana.get_all_segment_masses_and_widths(L_anon,Dflat)
+    mnw_analyses = ana.get_all_segment_masses_and_widths(L_anon,D_s)
     corr_analyses = ana.get_all_corellations(L_anon,D_s)
     analyses = ana.group_analyses(L_anon, ond_analyses, mnw_analyses, corr_analyses)
-    summary = ana.summarize_analyses(L_anon, analyses)
+    
+    summary = dict()
+    summary["label_summaries"] = ana.summarize_analyses(L_anon, analyses)
     summary["general"] = {"features": D.shape[0], "length": D.shape[1]}
-    summary["labels"] = L
+    summary["labels"] = L_anon
     npys_path = iot.npys_path()
     with open(npys_path / "analysis_manifest.txt", "a") as manifest:
         today = datetime.now()
@@ -36,12 +38,12 @@ def npy_list():
         npys.append(name)
     return npys
 
-def load_analysis_from_name(name):
+def load_summary_from_name(name):
     name = name.replace(".npz",".npy")
-    if ".npz" not in name:
+    if ".npy" not in name:
         name = name + ".npy"
-    return load_analysis(iot.npys_path() / name)
+    return load_summary(iot.npys_path() / name)
 
-def load_analysis(name):
+def load_summary(name):
     summary = np.load(name,allow_pickle=True).item()
-    return summary
+    return name, summary

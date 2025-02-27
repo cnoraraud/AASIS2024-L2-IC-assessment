@@ -127,8 +127,10 @@ def read_DL_from_name(name):
 
 def read_DL_metadata(path):
     name = path.stem
-    mtime = f"{time.ctime(os.path.getmtime(f"{path}"))}"
-    return name, mtime
+    mtime = os.path.getmtime(f"{path}")
+    cmtime = time.ctime(mtime)
+    time_string = f"{cmtime}"
+    return name, time_string
 
 def read_DL(path):
     npz = np.load(path)

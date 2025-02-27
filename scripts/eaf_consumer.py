@@ -14,6 +14,7 @@ def sanitize(name):
     namespace = name
     if any(x.isdigit() for x in name) and "_" in name:
         numspace = name.split("_")[0]
+        numspace = numspace.replace("sspeaker","speaker")
         namespace = "_".join(name.split("_")[1:])
         sanitized_number = numspace
     sanitized_name = "".join(filter(lambda x: x.isalpha() or x.isdigit() or x == ":" or x == "<" or x == ">", namespace)).lower()
