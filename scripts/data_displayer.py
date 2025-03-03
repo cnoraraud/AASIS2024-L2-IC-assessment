@@ -1,7 +1,8 @@
+import math
 import numpy as np
+import numpy_wrapper as npw
 import eaf_consumer as ec
 import matplotlib.pyplot as plt
-import math
 import npz_reader as npzr
 
 def sanitize_labels(labels, tag=""):
@@ -26,14 +27,16 @@ def display_spikes(data, labels, title, reorder=False, normrows=True, datadispla
     plot_data = data
     plot_labels = labels
     if normrows:
-        plot_data = plot_data - np.min(plot_data, axis=1, keepdims=True)
-        plot_data = plot_data / np.max(np.abs(plot_data), axis=1, keepdims=True)
+        plot_data = plot_data - np.min(plot_data, axis=-1, keepdims=True)
+        plot_data = plot_data / np.max(np.abs(plot_data), axis=-1, keepdims=True)
     if reorder:
         plot_data, plot_labels = npzr.reorder_data(plot_data, plot_labels)
+    if npw.is_string(plot_labels):
+        plot_labels = [plot_labels]
     fig, (ax) = plt.subplots(1, 1)
     fig.set_figwidth(15)
-    fig.set_figheight(len(labels)/4)
-    ax.imshow(plot_data, cmap=colormap, aspect='auto', interpolation='none', norm='symlog')
+    fig.set_figheight(len(plot_labels)/4)
+    ax.imshow(np.atleast_2d(plot_data), cmap=colormap, aspect='auto', interpolation='none', norm='symlog')
     ax.tick_params(top=False, labeltop=False, bottom=True, labelbottom=True, left=False, labelleft=True, right=False, labelright=False)
     ax.set_title(title)
     if len(plot_labels) > 0:

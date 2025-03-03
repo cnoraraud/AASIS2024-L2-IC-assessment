@@ -1,7 +1,10 @@
-import npy_reader as npyr
-import numpy as np
-import random
 import copy
+import random
+import numpy as np
+import numpy_wrapper as npw
+import npz_reader as npzr
+import npy_reader as npyr
+import analysis as ana
 
 def load_summaries(names):
     # volatile function, when you make changes, make sure you also make changes in reflective functions
@@ -71,20 +74,20 @@ def get_labels(summaries):
     # volatile function, when you make changes, make sure you also make changes in reflective functions
     # - analysis.py summarize_analyses
     # - load_summaries
-    label_collection = []
     my_label = get(summaries, f"*/summary/*/self/label")
     other_labels = get(summaries, f"*/summary/*/others/*/other_label")
-    labels = flatten_to_set([my_label,other_labels])
-    labels.discard(None)
-    return labels
+    labels_1 = flatten_to_set([my_label])
+    labels_2 =  flatten_to_set([other_labels])
+    labels_all = flatten_to_set([my_label, other_labels])
+    labels_1.discard(None)
+    labels_2.discard(None)
+    labels_all.discard(None)
+    return {"L1": sorted(list(labels_1)), "L2": sorted(list(labels_2)), "L": sorted(list(labels_all))}
 
 def string_replace(old_value, find, replace):
     if isinstance(old_value,np.str_):
         return np.str_(old_value.replace(find, replace))
     return old_value.replace(find, replace)
-
-def is_string(value):
-    return isinstance(value, str) or isinstance(value, np.str_)
 
 def replace_labels(obj, find, replace):
     discard = []
@@ -93,10 +96,10 @@ def replace_labels(obj, find, replace):
         value = obj[key]
         if isinstance(value, dict):
             replace_labels(value, find, replace)
-        elif is_string(value) and find in value:
+        elif npw.is_string(value) and find in value:
             obj[key] = string_replace(value, find, replace)
         
-        if is_string(key) and find in key:
+        if npw.is_string(key) and find in key:
             discard.append(key)
             new_key = string_replace(key, find, replace)
             add.append({new_key:obj[key]})
@@ -105,12 +108,6 @@ def replace_labels(obj, find, replace):
         del obj[key]
     for key_value_pair in add:
         obj.update(key_value_pair)
-
-def is_speaker_related(speaker, value):
-    check_substring = value.split(" ")[0]
-    if speaker in check_substring: return True
-    if "[all]" in check_substring: return True
-    return False
 
 def apply_sample_groupings_to_summaries(summaries, sample_groupings):
     summary_groupings = dict()
@@ -148,13 +145,13 @@ def apply_sample_groupings_to_summaries(summaries, sample_groupings):
                     label_summary = label_summaries[label_summary_key]
                     # Match S1/S2
                     self_label = get(label_summary, 'self/label')
-                    if is_speaker_related(S, self_label):
+                    if npw.is_speaker_related(S, self_label):
                         group_summaries[npy]['summary'][self_label] = copy.deepcopy(label_summary)
 
                 label_list = summary['labels']
                 new_label_list = []
                 for label in label_list:
-                    if is_speaker_related(S, label):
+                    if npw.is_speaker_related(S, label):
                         new_label_list.append(label)
                 group_summaries[npy]['summary']['labels'] = np.asarray(new_label_list, dtype = '<U64')
                 
@@ -171,3 +168,93 @@ def apply_sample_groupings_to_summaries(summaries, sample_groupings):
     for speaker in sorted(list(no_sessions_found)):
         print(f"\t{speaker}")
     return summary_groupings
+
+def sanitize_sample(sample, sanitize_value, sample_size):
+    if not ana.valid(sample) or np.shape(sample) != sample_size:
+        return np.full(sample_size, sanitize_value)
+    return sample
+
+def get_samples(summary, feature_name, self_labels=None, other_labels=None, sanitize=True, sanitize_value=np.nan, sample_size=()):
+    # Single value per matrix (general)
+    if isinstance(self_labels, type(None)):
+        sample = get(summary, f"summary/general/{feature_name}")
+        if sanitize:
+            sample = sanitize_sample(sample, sanitize_value, sample_size)
+        return sample
+    
+    matrix_shape = [self_labels.shape[0]]
+    if not isinstance(other_labels, type(None)):
+        matrix_shape = matrix_shape + [other_labels.shape[0]]
+    matrix_shape = tuple(matrix_shape) + sample_size
+
+    matrix = np.empty(matrix_shape)
+
+    for i, l1 in enumerate(self_labels):
+        if not isinstance(other_labels, type(None)):
+            # Multiple values per label (other)
+            for j, l2 in enumerate(other_labels):
+                sample = get(summary, f"summary/label_summaries/{l1}/others/{l2}/{feature_name}")
+                if sanitize:
+                    sample = sanitize_sample(sample, sanitize_value, sample_size)
+                matrix[i, j] = sample
+        else:
+            # Single value per label (self)
+            sample = get(summary, f"summary/label_summaries/{l1}/self/{feature_name}")
+            if sanitize:
+                sample = sanitize_sample(sample, sanitize_value, sample_size)
+            matrix[i] = sample
+    return matrix
+
+def gather_session_samples(summaries, feature_name, self_labels=None, other_labels=None, sanitize=True, sanitize_value=np.nan, sample_size=()):
+    session_samples = {}
+
+    for summary_key in summaries:
+        npy = summary["npy"]
+        summary = summaries[summary_key]
+        sample = get_samples(summary, feature_name, self_labels=self_labels, other_labels=other_labels, sanitize=sanitize, sanitize_value=sanitize_value, sample_size=sample_size)
+        session_samples[npy] = {"npy": npy, "sample": sample, "self_labels": self_labels, "other_labels": other_labels}
+
+def seperate_speaker_from_session(speaker, sample, self_labels, other_labels):
+    self_mask = npzr.has(self_labels, speaker)
+    new_sample = sample[self_mask, :]
+    new_self_labels = self_labels[self_mask]
+    new_self_labels = npzr.replace_labels(new_self_labels, speaker, "own")
+    speaker_other = npzr.get_speaker_other(speaker)
+    new_other_labels = npzr.replace_labels(other_labels, speaker_other, "other")
+    return new_sample, new_self_labels, new_other_labels
+
+def collapse_sessions_to_speakers(session_samples):
+    speaker_samples = {}
+
+    for sample_key in session_samples:
+        session_sample = session_samples[sample_key]
+        npy = session_sample["npy"]
+        sample = session_sample["sample"]
+        self_labels = session_sample["self_labels"]
+        other_labels = session_sample["other_labels"]
+        for speaker in npzr.get_speakers():
+            new_npy = f"{npy}_{speaker}"
+            new_sample, new_self_labels, new_other_labels = seperate_speaker_from_session(speaker, sample, self_labels, other_labels)
+            speaker_samples[new_npy] = {"npy": new_npy, "sample": new_sample, "self_labels": new_self_labels, "other_labels": new_other_labels}
+    return speaker_samples
+        
+def map_samples_to_common_matrix(all_samples):
+    all_self_labels = set()
+    all_other_labels = set()
+    for sample_key in all_samples:
+        sample = all_samples[sample_key]
+        all_self_labels.update(set(sample["self_labels"].tolist()))
+        all_other_labels.update(set(sample["other_labels"].tolist()))
+    all_self_labels = np.asarray(sorted(list(all_self_labels)), dtype = '<U64')
+    all_other_labels = np.asarray(sorted(list(all_other_labels)), dtype = '<U64')
+
+    shape = ()
+    mega_matrix = np.full(shape=shape)
+
+    for sample_key in all_samples:
+        sample = all_samples[sample_key]
+        self_labels = sample["self_labels"]
+        other_labels = sample["other_labels"]
+        self_mask = np.isin(all_self_labels, self_labels)   
+        other_mask = np.isin(all_other_labels, other_labels)
+        

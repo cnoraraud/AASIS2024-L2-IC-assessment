@@ -1,13 +1,11 @@
-import numpy as np
-import io_tools as iot
-import math
+import os
 import sys
 import re
 import time
-import os
-
-SPEAKER1 = "S1"
-SPEAKER2 = "S2"
+import math
+import numpy as np
+import io_tools as iot
+import numpy_wrapper as npw
 
 def nothas(labels, sub):
     return np.char.find(np.array(labels), sub) == -1
@@ -42,6 +40,8 @@ def do_label_select(data, labels, label_select):
     return data[label_select, :], labels[label_select]
 
 def reorder_data(data, labels):
+    if data.ndim == 1 or labels.ndim == 0:
+        return data, labels
     order = np.argsort(labels, stable='True')
     return data[order, :], labels[order]
 
@@ -92,12 +92,15 @@ def find_speakers_from_name(name):
     return speakers
 
 def anonymize_speakers(labels, speakers):
-    new_labels = replace_labels(labels, speakers[0], SPEAKER1)
-    new_labels = replace_labels(new_labels, speakers[1], SPEAKER2)
+    # label errors
+    new_labels = replace_labels(labels, "sspeaker","speaker")
+    new_labels = replace_labels(new_labels, "speakerspeaker","speaker")
+    new_labels = replace_labels(new_labels, speakers[0], npw.SPEAKER1)
+    new_labels = replace_labels(new_labels, speakers[1], npw.SPEAKER2)
     return new_labels
 
 def double_speaker_filter(labels):
-    return ~(has(labels, SPEAKER1) & has(labels, SPEAKER2))
+    return ~(has(labels, npw.SPEAKER1) & has(labels, npw.SPEAKER2))
 
 def write_DL(name, D, L):
     npzs_path = iot.npzs_path()

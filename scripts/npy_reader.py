@@ -9,18 +9,18 @@ import numpy as np
 def analyse_npz(name, D, L):
     speakers = npzr.find_speakers_from_name(name)
     L_anon = npzr.anonymize_speakers(L, speakers)
-    L_filter = npzr.canonical_select(L_anon, [[("has","ann.")],[("has","energy")]]) & npzr.double_speaker_filter(L)
-    D_s, L_anon = npzr.do_label_select(D, L_anon, L_filter)
-    D_s, L_anon = npzr.focus_on_label(D_s, L_anon, "performance")
+    D_s, L_anon = npzr.focus_on_label(D, L_anon, "performance")
+    L_filter = npzr.canonical_select(L_anon, [[("has","ann.")],[("has","energy")]]) & npzr.double_speaker_filter(L_anon)
+    D_s, L_anon = npzr.do_label_select(D_s, L_anon, L_filter)
     Dflat = npzr.flatten_data(D_s)
-    ond_analyses = ana.get_all_segment_overlaps_and_delays(L_anon,Dflat)
-    mnw_analyses = ana.get_all_segment_masses_and_widths(L_anon,D_s)
-    corr_analyses = ana.get_all_corellations(L_anon,D_s)
+    ond_analyses = ana.get_all_segment_overlaps_and_delays(L_anon, Dflat)
+    mnw_analyses = ana.get_all_segment_masses_and_widths(L_anon, D_s)
+    corr_analyses = ana.get_all_corellations(L_anon, D_s)
     analyses = ana.group_analyses(L_anon, ond_analyses, mnw_analyses, corr_analyses)
     
     summary = dict()
     summary["label_summaries"] = ana.summarize_analyses(L_anon, analyses)
-    summary["general"] = {"features": D.shape[0], "length": D.shape[1]}
+    summary["general"] = {"features": D.shape[0], "length": D.shape[1], "performance_length": D_s.shape[1]}
     summary["labels"] = L_anon
     npys_path = iot.npys_path()
     with open(npys_path / "analysis_manifest.txt", "a") as manifest:
