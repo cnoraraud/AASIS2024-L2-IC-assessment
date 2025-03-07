@@ -56,9 +56,14 @@ def find_wavs_ms(wavs):
         W = round(data_raw.shape[0] / H)
         ms_proposals.append(W)
     ms_proposals = set(ms_proposals)
-    if len(ms_proposals) != 1:
+    if len(ms_proposals) > 1:
         print(f"Invalid number of ms proposals: {len(ms_proposals)}")
-    ms = list(ms_proposals)[0]
+        ms = list(ms_proposals)[0]
+    elif len(ms_proposals) == 0:
+        print(f"Invalid number of ms proposals: {len(ms_proposals)}")
+        ms = 0
+    else:
+        ms = list(ms_proposals)[0]
     return ms
 
 def data_to_ms(data, ms, samples_per_ms, aggregate='mean'):

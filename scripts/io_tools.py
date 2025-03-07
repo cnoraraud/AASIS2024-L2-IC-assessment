@@ -1,10 +1,13 @@
+import os
 import sys
 import yaml
+import shutil
 import pathlib as p
 from datetime import datetime
-import shutil
-import elan_tools
+import numpy as np
 from pympi import Elan as elan
+import elan_tools as elant
+import name_tools as namet
 
 def get_config_private():
     with open('../config/privateconfig.yml', 'r') as file:
@@ -51,6 +54,24 @@ def private_data_path(key):
     data_path = personal_path / config["paths"]["personal_data"][key]
     return data_path
 
+def aasis_data_path(key):
+    config = get_config_private()
+    aasis_path = p.Path(config["paths"]["main_data"]["."])
+    data_path = aasis_path / config["paths"]["main_data"][key]
+    return data_path
+
+def aasis_wavs_path():
+    return aasis_data_path("wavs")
+
+def aasis_eafs_path():
+    return aasis_data_path("eafs")
+
+def aasis_csvs_path():
+    return aasis_data_path("csvs")
+
+def aasis_mp4s_path():
+    return aasis_data_path("mp4s")
+
 def wavs_path():
     return private_data_path("wavs")
 
@@ -69,13 +90,17 @@ def npys_path():
 def special_data_path():
     return private_data_path("special_data")
 
+def figs_path():
+    return private_data_path("figs")
+
+# Pref use source_data_from_sessions
 def source_annotated_data():
     config = get_config_private()
     aasis_path = p.Path(config["paths"]["main_data"]["."])
     personal_path = p.Path(config["paths"]["personal_data"]["."])
-    eafs_src_path = aasis_path / config["paths"]["main_data"]["eafs"]
-    wavs_src_path = aasis_path / config["paths"]["main_data"]["wavs"]
-    csvs_src_path = aasis_path / config["paths"]["main_data"]["csvs"]
+    eafs_src_path = aasis_eafs_path()
+    wavs_src_path = aasis_wavs_path()
+    csvs_src_path = aasis_csvs_path()
     eafs_dst_path = eafs_path()
     wavs_dst_path = wavs_path()
     csvs_dst_path = csvs_path()
@@ -100,7 +125,7 @@ def source_annotated_data():
 
                 eaf_path = eaf_src_choices[get_choice]
                 # find wavs
-                wav_names, mp4_names = elan_tools.get_wav_names(elan.Eaf(eaf_path))
+                wav_names, mp4_names = elant.get_wav_names(elan.Eaf(eaf_path))
                 wavs = []
                 for wav_name in wav_names:
                     if not p.Path(wavs_dst_path / wav_name).exists():
@@ -148,6 +173,90 @@ def source_annotated_data():
                 bad += 1
         manifest.write(f"\tSTATS: good {good} bad {bad} new {new}\n")
         manifest.write(f"FINISHING copy {datetime.now()}\n")
+
+def any_in(search_string, sub_strings):
+    for sub_string in sub_strings:
+        if sub_string in search_string:
+            return True
+    return False
+
+def find_session_files(file_list, task, speakers):
+    match_list = []
+    for file_path in file_list:
+        file_name = p.Path(file_path).name
+        if task not in file_name:
+            continue
+        if not any_in(file_name, speakers):
+            continue
+        match_list.append(file_path)
+    return match_list
+
+def get_newest_file_paths(file_paths):
+    file_names = set()
+    for file_path in file_paths:
+        file_names.add(file_path.name)
+    file_names = sorted(list(file_names))
+    output_file_paths = []
+    for file_name in file_names:
+        path_list = []
+        time_list = []
+        for file_path in file_paths:
+            if file_name == file_path.name:
+                path_list.append(file_path)
+                time_list.append(os.path.getmtime(f"{file_path}"))
+        path_list = np.array(path_list)
+        time_list = np.array(time_list)
+        path_list_sorted = path_list[np.argsort(time_list)].tolist()
+        if len(path_list_sorted) > 0:
+            output_file_paths.append(path_list_sorted[-1])
+    return output_file_paths
+
+def get_aasis_sessions():
+    sessions = dict()
+    eaf_list = sorted(aasis_eafs_path().glob(f'**/*.eaf'))
+    eafs = get_newest_file_paths(eaf_list)
+    wav_list = sorted(aasis_wavs_path().glob(f'**/*.wav'))
+    csv_list = sorted(aasis_csvs_path().glob(f'**/*.csv'))
+    mp4_list = sorted(aasis_mp4s_path().glob(f'**/*.mp4'))
+    for eaf in eafs:
+        eaf_name = eaf.name
+        task = namet.find_task(eaf_name)
+        speakers = namet.find_speakers(eaf_name)
+        wavs = []
+        csvs = []
+        mp4s = []
+        for wav_file_path in find_session_files(wav_list, task, speakers):
+            wavs.append(wav_file_path)
+        for csv_file_path in find_session_files(csv_list, task, speakers):
+            csvs.append(csv_file_path)
+        for mp4_file_path in find_session_files(mp4_list, task, speakers):
+            mp4s.append(mp4_file_path)
+        wavs = get_newest_file_paths(wavs)
+        csvs = get_newest_file_paths(csvs)
+        mp4s = get_newest_file_paths(mp4s)
+        sessions[eaf_name] = {"name": eaf_name, "eaf":eaf, "wavs": wavs, "csvs": csvs, "mp4s":mp4s}
+    return sessions
+
+def print_aasis_sessions():
+    print("Finding Sessions...")
+    sessions = get_aasis_sessions()
+    for session_key in sessions:
+        session = sessions[session_key]
+        print(f"{session["name"]} ({session["eaf"]})")
+        print("\twavs:")
+        for wav in session["wavs"]:
+            print(f"\t\t{wav.name} ({wav})")
+        print("\tcsvs:")
+        for csv in session["csvs"]:
+            print(f"\t\t{csv.name} ({csv})")
+        print("\tmp4s:")
+        for mp4 in session["mp4s"]:
+            print(f"\t\t{mp4.name} ({mp4})")
+        print()
+
+def source_data_from_sessions(sessions):
+    #TODO
+    pass
 
 if __name__ == '__main__':
     globals()[sys.argv[1]]()

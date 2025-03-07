@@ -6,6 +6,7 @@ paths:
     wavs: "<sub dir>"
     eafs: "<sub dir>"
     csvs: "<sub dir>"
+    mp4s: "<sub dir>"
   personal_data:
     .: "<root dir>"
     wavs: "<sub dir>"
@@ -13,4 +14,6 @@ paths:
     npsz: "<sub dir>"
     npys: "<sub dir>"
     csvs: "<sub dir>"
+    mp4s: "<sub dir>"
+    figs: "<sub dir>"
     special_data: "<sub dir>"

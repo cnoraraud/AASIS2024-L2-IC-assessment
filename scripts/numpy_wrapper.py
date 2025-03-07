@@ -89,3 +89,8 @@ def div_datas(data1, data2):
     if not valid(data1) or not valid(data2):
         return np.nan
     return data1/data2
+
+def string_array(data):
+    if is_string(data):
+        data = [data]
+    return np.asarray(data, dtype = '<U64')

@@ -2,6 +2,7 @@ import numpy as np
 import io_tools as iot
 from scipy import interpolate
 
+# TODO: similar function in filtering.py... combine somehow?
 def fitToData(x,y,t_max=None):
     if t_max is None:
         t_max = x.max()
@@ -9,6 +10,7 @@ def fitToData(x,y,t_max=None):
     new_x = np.arange(t_max)
     new_y = f(new_x)
     return new_x, new_y
+
 def joystickData(js, t_max=None):
     x = []
     y = []
@@ -41,6 +43,7 @@ def joystickData(js, t_max=None):
         ys.append(y_new)
     y = np.concatenate([ys])
     return y
+
 def get_joysticks_for_D(name, D, L):
     new_D = np.copy(D)
     new_L = np.copy(L)

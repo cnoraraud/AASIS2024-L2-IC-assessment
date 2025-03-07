@@ -153,7 +153,7 @@ def apply_sample_groupings_to_summaries(summaries, sample_groupings):
                 for label in label_list:
                     if npw.is_speaker_related(S, label):
                         new_label_list.append(label)
-                group_summaries[npy]['summary']['labels'] = np.asarray(new_label_list, dtype = '<U64')
+                group_summaries[npy]['summary']['labels'] = npw.string_array(new_label_list)
                 
             count_total += 1
             if not found:
@@ -245,8 +245,8 @@ def map_samples_to_common_matrix(all_samples):
         sample = all_samples[sample_key]
         all_self_labels.update(set(sample["self_labels"].tolist()))
         all_other_labels.update(set(sample["other_labels"].tolist()))
-    all_self_labels = np.asarray(sorted(list(all_self_labels)), dtype = '<U64')
-    all_other_labels = np.asarray(sorted(list(all_other_labels)), dtype = '<U64')
+    all_self_labels = npw.string_array(sorted(list(all_self_labels)))
+    all_other_labels = npw.string_array(sorted(list(all_other_labels)))
 
     shape = ()
     mega_matrix = np.full(shape=shape)
@@ -257,4 +257,6 @@ def map_samples_to_common_matrix(all_samples):
         other_labels = sample["other_labels"]
         self_mask = np.isin(all_self_labels, self_labels)   
         other_mask = np.isin(all_other_labels, other_labels)
+    
+    #TODO
         

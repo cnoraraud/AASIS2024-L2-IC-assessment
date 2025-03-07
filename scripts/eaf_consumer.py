@@ -1,5 +1,6 @@
 import re
 import numpy as np
+import numpy_wrapper as npw
 
 TEXT_TAG = "<text>"
 LABELLED_TIERS = ["hand", "head", "body", "text"]
@@ -114,7 +115,7 @@ def sanitize_text(text, collapse_languages = True):
     return sanitized_text
 
 def sanitize_labels(labels, tag=""):
-    labels = np.asarray(labels, dtype = '<U64')
+    labels = npw.string_array(labels)
     sanitized_labels = np.empty(labels.shape, dtype = labels.dtype)
     for i, label in np.ndenumerate(labels):
         sanitized_label, sanitized_number = sanitize(label)

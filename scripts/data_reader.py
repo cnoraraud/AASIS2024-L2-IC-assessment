@@ -6,9 +6,9 @@ import numpy as np
 from scipy.io import wavfile
 from pympi import Elan as elan
 
-import io_tools
-import elan_tools
-import wav_tools
+import io_tools as iot
+import elan_tools as elant
+import wav_tools as wavt
 
 def num_to_n_chars(num:int, n:int):
     return str(num).rjust(n, "0")[-n:]
@@ -69,7 +69,7 @@ def check_data_row(table, key):
 
 def list_eaf_with_regex(regex):
     # wav, eaf naming convention: <4: year><4: recording>_speaker<3: speaker>_task<1: task>_set<2: set>.<extension>
-    config = io_tools.get_config_private()
+    config = iot.get_config_private()
     personal_path = p.Path(config["paths"]["personal_data"]["."])
     eafs_path = personal_path / config["paths"]["personal_data"]["eafs"]
     eafs_path_list = []
@@ -124,7 +124,7 @@ def read_wav(wav_names, wavs_path_sr, wavs_path, sr):
                 sr0, data0 = wavfile.read(wav_path_sr.as_posix())
                 wav = (sr0, data0, speakers0, mics0)
             elif wav_path.exists():
-                sr0, data0 = wav_tools.resample_wavs(wav_path = wav_path, wav_path_sr = wav_path_sr, sr = sr)
+                sr0, data0 = wavt.resample_wavs(wav_path = wav_path, wav_path_sr = wav_path_sr, sr = sr)
                 wav = (sr0, data0, speakers0, mics0)
             
             if wav is not None:
@@ -135,7 +135,7 @@ def read_wav(wav_names, wavs_path_sr, wavs_path, sr):
     return wavs
 
 def read_row(eafpath, sr:int=None, do_wav = False):
-    config = io_tools.get_config_private()
+    config = iot.get_config_private()
     personal_path = p.Path(config["paths"]["personal_data"]["."])
     wav_names = []
     mp4_names = []
@@ -143,7 +143,7 @@ def read_row(eafpath, sr:int=None, do_wav = False):
     # populate eaf
     try:
         eaf = elan.Eaf(eafpath)
-        wav_names, mp4_names = elan_tools.get_wav_names(eaf)
+        wav_names, mp4_names = elant.get_wav_names(eaf)
     except:
         print(f"Could not read {eafpath}")
     
@@ -156,7 +156,7 @@ def read_row(eafpath, sr:int=None, do_wav = False):
     return eaf, wavs
 
 def read_rows(table, key_whitelist=None, sr:int=None, do_wavs = False):
-    config = io_tools.get_config_private()
+    config = iot.get_config_private()
     personal_path = p.Path(config["paths"]["personal_data"]["."])
     wavs_path = personal_path / config["paths"]["personal_data"]["wavs"]
     wavs_path_sr = wavs_path if sr is None else wavs_path / f"sr{sr}/"

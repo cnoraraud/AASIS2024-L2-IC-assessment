@@ -9,6 +9,7 @@ import wav_consumer as wc
 import csv_consumer as csvc
 import npz_reader as npzr
 import npy_reader as npy
+import traceback
 
 from collections import Counter
 
@@ -105,6 +106,7 @@ def iterate_through_data_provider(method, n = math.inf, offset = 0):
                 aggregate.extend(results)
             except Exception as e:
                 print(f"Failure at {i}: {key}   {e}")
+                print(traceback.format_exc())
         i += 1
     return Counter(aggregate), i
 
@@ -139,6 +141,7 @@ def iterate_through_npz_provider(method, n = math.inf, offset = 0):
                 aggregate.extend(results)
             except Exception as e:
                 print(f"Failure at {i}: {name}   {e}")
+                print(traceback.format_exc())
         i += 1
     return Counter(aggregate), i
 

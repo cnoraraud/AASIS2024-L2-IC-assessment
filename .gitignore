@@ -30,6 +30,7 @@
 *.[Nn][Pp][Zz]
 
 # Aalto files
+*.slurm
 *.xlsx
 *.insv
 *.eaf

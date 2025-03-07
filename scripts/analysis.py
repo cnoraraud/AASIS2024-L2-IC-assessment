@@ -2,22 +2,44 @@ import concurrent
 import numpy as np
 import numpy_wrapper as npw
 import npz_reader as npzr
+import filtering as filt
+import analysis as ana
 from scipy import stats as sstat
 
-def apply_method_to_feature(data, method, properties, i):
-    return method(data[i,:], properties)
+def apply_method_to_feature(data, method, properties):
+    return method(data, properties)
+
+def apply_method_to_feature_at_i(data, method, properties, i):
+    return apply_method_to_feature(data[i,:], method, properties)
+
 def apply_method_to_all_features(data, method, properties):
-    return apply_method_to_select(data, method, properties, (data==data)[:,0])
+    return apply_method_to_select(data, method, properties, np.any(~np.isnan(data), axis=1))
+
 def apply_method_to_select(data, method, properties, select):
-    new_data = np.copy(data)
-    for i in range(select.shape[0]):
-        if select[i]:
-            new_data[i] = apply_method_to_feature(data, method, properties, i)
-    return new_data
+    if "destructive" in properties and properties["destructive"]:
+        new_data_list = [None] * select.shape[0]
+        max_length = 0
+        for i in range(select.shape[0]):
+            if select[i]:
+                new_data_list[i] = apply_method_to_feature_at_i(data, method, properties, i)
+                max_length = max(max_length, new_data_list[i].shape[0])
+        new_data = np.empty((len(new_data_list), max_length))
+        for i in range(select.shape[0]):
+            new_data[i, :new_data_list[i].shape[0]] = new_data_list[i]
+        return new_data
+    else:
+        new_data = np.copy(data)
+        for i in range(select.shape[0]):
+            if select[i]:
+                new_data[i] = apply_method_to_feature_at_i(data, method, properties, i)
+        return new_data
+
 def analyze_feature(data, method, properties, i):
     return method(data[i,:], properties)
+
 def analyze_all_features(data, method, properties):
-    return analyze_select(data, method, properties, ((data==data)[:,0]))
+    return analyze_select(data, method, properties, np.any(~np.isnan(data), axis=1))
+
 def try_analyze(data, method, properties, select, i):
     if select[i]:
         try:
@@ -25,6 +47,7 @@ def try_analyze(data, method, properties, select, i):
         except Exception as e:
             print(f"Exception at {i}:\n{e}")
     return None, i
+
 def analyze_select(data, method, properties, select):
     parallel = False
     if "parallel" in properties:
@@ -44,6 +67,41 @@ def analyze_select(data, method, properties, select):
             results[i] = result
         return results
     return None
+
+# This was kind of sketchy
+# Doesn't work if there is speech overlap or no speech.
+# Doesn't return who is starting speaking
+def turn_taking_times_naive(D, L, n=5000):
+    L_filter = npzr.has(L,"text:text")
+    D, L = npzr.do_label_select(D, L, L_filter)
+    D = npzr.flatten_data(D) + 0.11
+    D[0,:] -= D[1,:]
+    D = npzr.flatten_data(D, -0.22)
+    D[0, :] = filt.ma(D[0, :], {"n": n})
+    D = npzr.flatten_data(D, 0.5)
+    D[0, :] = filt.ma(D[0, :], {"n": n})
+    D = npzr.flatten_data(D, 0.5)
+    return np.where(np.diff(D[0, :]) != 0)[0]
+
+# Not as precise but doesn't struggle with edge cases.
+# Assumes it's always someone's turn
+def turn_taking_times_comparative(D, L, n=5000):
+    L_filter = npzr.has(L,"text:text") & npzr.double_speaker_filter(L)
+    D, L = npzr.do_label_select(D, L, L_filter)
+    if np.size(L) < 2:
+        return np.zeros(0), np.full(0,"S0")
+    silence_mask = np.sum(D, axis=0) == 0.0
+    D = ana.apply_method_to_all_features(D, filt.to_01, {})
+    D[:, silence_mask] = np.nan
+    D = ana.apply_method_to_all_features(D, filt.interpolate_nans, {})
+    D = ana.apply_method_to_all_features(D, filt.ma, {"n": n})
+    S1_larger = (D[0,:] >= D[1,:]).astype(np.int_)
+    diff = np.diff(S1_larger)
+    times = np.where(diff != 0)[0]
+    S1_starting = diff[times] > 0
+    starting = np.full(times.shape, "S2")
+    starting[S1_starting] = "S1"
+    return times, starting
 
 def find_pearsonr(a, properties):
     B = properties["B"]
