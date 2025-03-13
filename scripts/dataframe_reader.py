@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+import numpy_wrapper as npw
 import collections
 import pandas as pd
 import math
@@ -50,16 +51,16 @@ def find_sample_groupins(groups, samples):
             for i, speaker_sample in speaker_samples.iterrows():
                 S = None
                 if speaker_sample["speaker_1"] == speaker:
-                    S = "S1"
+                    S = npw.SPEAKER1
                 if speaker_sample["speaker_2"] == speaker:
-                    S = "S2"
+                    S = npw.SPEAKER2
                 speaker_samples_obj = {
-                    "speaker":speaker,
-                    "S":S,
-                    "npz":speaker_sample["npz"],
-                    "npy":speaker_sample["npy"],
-                    "task":speaker_sample["task"],
-                    "annotator":speaker_sample["annotator"]}
+                    "speaker": speaker,
+                    "S": S,
+                    "npz": speaker_sample["npz"],
+                    "npy": speaker_sample["npy"],
+                    "task": speaker_sample["task"],
+                    "annotator": speaker_sample["annotator"]}
             group_samples_obj[speaker] = speaker_samples_obj
         samples_obj[group_key] = group_samples_obj
     return samples_obj

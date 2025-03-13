@@ -2,51 +2,21 @@ import os
 import sys
 import yaml
 import shutil
+import traceback
 import pathlib as p
 from datetime import datetime
 import numpy as np
 from pympi import Elan as elan
 import elan_tools as elant
-import name_tools as namet
+import naming_tools as nt
 
 def get_config_private():
     with open('../config/privateconfig.yml', 'r') as file:
         return yaml.safe_load(file)
+
 def get_config_public():
     with open('../config/publicconfig.yml', 'r') as file:
         return yaml.safe_load(file)
-
-def list_dir(path, extension="*"):
-    names = []
-    for file in path.glob(f'**/*.{extension}'):
-        names.append(file.name)
-    return names
-
-def annotated_list():
-    config = get_config_private()
-    aasis_path = p.Path(config["paths"]["main_data"]["."])
-    eafs_path = aasis_path / config["paths"]["main_data"]["eafs"]
-    annotation_list = []
-    for eaf in eafs_path.glob('**/*.eaf'):
-        annotation = eaf.stem
-        if annotation not in annotation_list:
-            annotation_list.append(annotation)
-    return annotation_list
-
-def get_csv_names_joystick(eaf_name):
-    annotators = ["il","jk"]
-    versions = ["001", "002"]
-    base_name = eaf_name
-    if "take" in eaf_name:
-        base_name = "_".join(eaf_name.split("_")[:-1])
-    speakers = base_name.split("_")[1].split("speaker")[1:]
-    csv_names = []
-    for speaker in speakers:
-        for annotator in annotators:
-            for version in versions:
-                csv_name = f"{base_name}_speaker{speaker}_{annotator}_{version}.csv"
-                csv_names.append(csv_name)
-    return csv_names
 
 def private_data_path(key):
     config = get_config_private()
@@ -72,6 +42,12 @@ def aasis_csvs_path():
 def aasis_mp4s_path():
     return aasis_data_path("mp4s")
 
+def aasis_pyfeat_csvs_path():
+    return aasis_data_path("pyfeat_csvs")
+
+def aasis_joystick_csvs_path():
+    return aasis_data_path("joystick_csvs")
+
 def wavs_path():
     return private_data_path("wavs")
 
@@ -80,6 +56,15 @@ def eafs_path():
 
 def csvs_path():
     return private_data_path("csvs")
+
+def mp4s_path():
+    return private_data_path("mp4s")
+
+def pyfeat_csvs_path():
+    return private_data_path("pyfeat_csvs")
+
+def joystick_csvs_path():
+    return private_data_path("joystick_csvs")
 
 def npzs_path():
     return private_data_path("npzs")
@@ -94,7 +79,44 @@ def figs_path():
     return private_data_path("figs")
 
 # Pref use source_data_from_sessions
-def source_annotated_data():
+def list_dir(path, extension="*"):
+    names = []
+    for file in path.glob(f'**/*.{extension}'):
+        names.append(file.name)
+    return names
+
+def annotated_list():
+    config = get_config_private()
+    aasis_path = p.Path(config["paths"]["main_data"]["."])
+    eafs_path = aasis_path / config["paths"]["main_data"]["eafs"]
+    annotation_list = []
+    for eaf in eafs_path.glob('**/*.eaf'):
+        annotation = eaf.stem
+        if annotation not in annotation_list:
+            annotation_list.append(annotation)
+    return annotation_list
+
+def get_csv_names_facial_features(name):
+    pyfeat_csv_list = pyfeat_csvs_path().glob(f'**/*.csv')
+    session = get_related_session_for_file(name, use_defaults=False, pyfeat_csv_list=pyfeat_csv_list)
+    return session["pyfeat_csvs"]
+
+def get_csv_names_joystick(eaf_name):
+    annotators = ["il","jk"]
+    versions = ["001", "002"]
+    base_name = eaf_name
+    if "take" in eaf_name:
+        base_name = "_".join(eaf_name.split("_")[:-1])
+    speakers = base_name.split("_")[1].split("speaker")[1:]
+    csv_names = []
+    for speaker in speakers:
+        for annotator in annotators:
+            for version in versions:
+                csv_name = f"{base_name}_speaker{speaker}_{annotator}_{version}.csv"
+                csv_names.append(csv_name)
+    return csv_names
+
+def source_annotated_data_discrete():
     config = get_config_private()
     aasis_path = p.Path(config["paths"]["main_data"]["."])
     personal_path = p.Path(config["paths"]["personal_data"]["."])
@@ -106,7 +128,7 @@ def source_annotated_data():
     csvs_dst_path = csvs_path()
     
     with open(personal_path / "copy_manifest.txt", "a") as manifest:
-        manifest.write(f"\nSTARTING copy {datetime.now()}\n")
+        manifest.write(f"\nSTARTING discrete copy {datetime.now()}\n")
         version = config["version"]
         date = config["date"]
         manifest.write(f"\tCONFIG: version {version} from {date}\n")
@@ -150,8 +172,9 @@ def source_annotated_data():
 
                 # copy
                 updated = 0
-                if not p.Path(eafs_dst_path / eaf_path.name).exists():
-                    shutil.copy(eaf_path, eafs_dst_path / eaf_path.name)
+                eaf = p.Path(eafs_dst_path / eaf_path.name)
+                if not eaf.exists():
+                    shutil.copy(eaf_path, eaf)
                     manifest.write(f"\t{annotation}: eaf succeeded\n")
                     updated += 1
                 for wav in wavs:
@@ -174,20 +197,120 @@ def source_annotated_data():
         manifest.write(f"\tSTATS: good {good} bad {bad} new {new}\n")
         manifest.write(f"FINISHING copy {datetime.now()}\n")
 
+def check_configured(key_name, key_value):
+    print(key_value)
+    if "<" in key_value or ">" in key_value:
+        print(f"Key \'{key_name}\' not configured in! (\'{key_value}\')")
+        raise NameError("")
+
+def create_data_folders():
+    new_folders = 0
+    successful = False
+    try:
+        print("Attempting automatic data folder creation.")
+        config = get_config_private()
+        personal_data = config["paths"]["personal_data"]
+        rootdir = personal_data["."]
+        check_configured(".", rootdir)
+        rootdir_path = p.Path(rootdir)
+        if create_missing_folder(rootdir_path): new_folders += 1
+        subdirs = list(personal_data.keys())
+        subdirs.remove(".")
+        for subdir_key in subdirs:
+            subdir = personal_data[subdir_key]
+            check_configured(f"subdir:{subdir_key}", subdir)
+            subdir_path = rootdir_path / p.Path(subdir)
+            if create_missing_folder(subdir_path): new_folders += 1
+        print("Automatic data folder creation succeeded.")
+        successful = True
+    except NameError as ve:
+        print("Automatic data folder creation failed.")
+        print("\tEncountered NameError in creating folders. Has \'privateconfig.yml\' been created and configured?")
+    except Exception as e:
+        print("Automatic data folder creation failed.")
+        print(traceback.format_exc())
+    finally:
+        print(f"Total new folders: {new_folders}")
+    return successful
+
+def create_missing_folder(tgt):
+    if p.Path(tgt).exists():
+        return False
+    os.mkdir(tgt)
+    return True
+
+def copy_missing(src, tgt):
+    if p.Path(tgt).exists():
+        return False
+    shutil.copy(src, tgt)
+    return True
+
+def remove_plural(word):
+    if len(word) == 0: return word
+    if word[-1] == "s": return word[:-1]
+    return word
+
+def source_annotated_data_fuzzy():
+    config = get_config_private()
+    aasis_path = p.Path(config["paths"]["main_data"]["."])
+    personal_path = p.Path(config["paths"]["personal_data"]["."])
+    sessions = get_aasis_sessions()
+
+    with open(personal_path / "copy_manifest.txt", "a") as manifest:
+        version = config["version"]
+        date = config["date"]
+        good = 0
+        new = 0
+        bad = 0
+        manifest.write(f"\nSTARTING fuzzy copy {datetime.now()}\n")
+        manifest.write(f"\tCONFIG: version {version} from {date}\n")
+        manifest.write(f"\tFROM: {aasis_path} TO: {personal_path}\n")
+        for session_key in sessions:
+            try:
+                session = sessions[session_key]
+                name = session["name"]
+                updated = 0
+
+                tags = ["eafs", "wavs", "csvs", "pyfeat_csvs", "joystick_csvs"]
+                for tag in tags:
+                    tag_name = remove_plural(tags)
+                    file_paths = session[tag]
+                    file_dst_path = private_data_path(tag)
+                    for file_path in file_paths:
+                        if copy_missing(file_path, file_dst_path / file_path.name):
+                            manifest.write(f"\t{name}: {tag_name} succeeded ({file_path.name})\n")
+                            updated += 1
+                
+                if updated == 0:
+                    manifest.write(f"\t{name}: already existed\n")
+                else:
+                    new += updated
+                good += 1
+            except Exception as e:
+                print(traceback.format_exc())
+                manifest.write(f"\t{name}: failed\n\t\terror: {e}\n")
+                bad += 1
+        manifest.write(f"\tSTATS: good {good} bad {bad} new {new}\n")
+        manifest.write(f"FINISHING copy {datetime.now()}\n")
+
+    return None
+
 def any_in(search_string, sub_strings):
     for sub_string in sub_strings:
         if sub_string in search_string:
             return True
     return False
 
-def find_session_files(file_list, task, speakers):
+def find_session_files(file_list=None, task=None, speakers=None):
+    if isinstance(file_list, type(None)):
+        file_list = []
+    
     match_list = []
     for file_path in file_list:
         file_name = p.Path(file_path).name
-        if task not in file_name:
-            continue
-        if not any_in(file_name, speakers):
-            continue
+        if task not in file_name: continue
+        if not any_in(file_name, speakers): continue
+
         match_list.append(file_path)
     return match_list
 
@@ -211,52 +334,118 @@ def get_newest_file_paths(file_paths):
             output_file_paths.append(path_list_sorted[-1])
     return output_file_paths
 
-def get_aasis_sessions():
+# TODO: generics somehow?
+def get_related_session_for_file(file, use_defaults=True, eaf_list=None, wav_list=None, csv_list=None, mp4_list=None, pyfeat_csv_list=None, joystick_csv_list=None):
+    # Defaults
+    file_path = p.Path(file)
+    file_name = file_path.name
+    if use_defaults and isinstance(eaf_list, type(None)):
+        eaf_list = sorted(eafs_path().glob(f'**/*.eaf'))
+    if use_defaults and isinstance(wav_list, type(None)):
+        wav_list = sorted(wavs_path().glob(f'**/*.wav'))
+    if use_defaults and isinstance(csv_list, type(None)):
+        csv_list = sorted(csvs_path().glob(f'**/*.csv'))
+    if use_defaults and isinstance(mp4_list, type(None)):
+        mp4_list = sorted(mp4s_path().glob(f'**/*.mp4'))
+    if use_defaults and isinstance(pyfeat_csv_list, type(None)):
+        pyfeat_csv_list = sorted(pyfeat_csvs_path().glob(f'**/*.csv'))
+    if use_defaults and isinstance(joystick_csv_list, type(None)):
+        joystick_csv_list = sorted(joystick_csvs_path().glob(f'**/*.csv'))
+
+    # Session
+    task = nt.find_task(file_name)
+    speakers = nt.find_speakers(file_name)
+    
+    eafs = []
+    wavs = []
+    csvs = []
+    mp4s = []
+    pyfeat_csvs = []
+    joystick_csvs = []
+
+    for eaf_file_path in find_session_files(eaf_list, task, speakers):
+        eafs.append(eaf_file_path)
+    for wav_file_path in find_session_files(wav_list, task, speakers):
+        wavs.append(wav_file_path)
+    for csv_file_path in find_session_files(csv_list, task, speakers):
+        csvs.append(csv_file_path)
+    for mp4_file_path in find_session_files(mp4_list, task, speakers):
+        mp4s.append(mp4_file_path)
+    for pyfeat_csv_path in find_session_files(pyfeat_csv_list, task, speakers):
+        pyfeat_csvs.append(pyfeat_csv_path)
+    for joystick_csv_path in find_session_files(joystick_csv_list, task, speakers):
+        joystick_csvs.append(joystick_csv_path)
+
+    eafs = get_newest_file_paths(eafs)
+    wavs = get_newest_file_paths(wavs)
+    csvs = get_newest_file_paths(csvs)
+    mp4s = get_newest_file_paths(mp4s)
+    pyfeat_csvs = get_newest_file_paths(pyfeat_csvs)
+    joystick_csvs = get_newest_file_paths(joystick_csvs)
+    return {"name": file_name,
+            "eafs": eafs,
+            "wavs": wavs,
+            "csvs": csvs,
+            "mp4s":mp4s,
+            "pyfeat_csvs": pyfeat_csvs,
+            "joystick_csvs": joystick_csvs}
+
+def get_sessions_from_lists(eaf_list, wav_list, csv_list, mp4_list, pyfeat_csv_list, joystick_csv_list):
     sessions = dict()
-    eaf_list = sorted(aasis_eafs_path().glob(f'**/*.eaf'))
     eafs = get_newest_file_paths(eaf_list)
+    for eaf in eafs:
+        session = get_related_session_for_file(
+            eaf,
+            eaf_list=eaf_list,
+            wav_list=wav_list,
+            csv_list=csv_list,
+            mp4_list=mp4_list,
+            pyfeat_csv_list=pyfeat_csv_list,
+            joystick_csv_list=joystick_csv_list)
+        sessions[session["name"]] = session
+    return sessions
+
+def get_sessions():
+    eaf_list = sorted(eafs_path().glob(f'**/*.eaf'))
+    wav_list = sorted(wavs_path().glob(f'**/*.wav'))
+    csv_list = sorted(csvs_path().glob(f'**/*.csv'))
+    mp4_list = sorted(mp4s_path().glob(f'**/*.mp4'))
+    pyfeat_csv_list = sorted(pyfeat_csvs_path().glob(f'**/*.csv'))
+    joystick_csv_list = sorted(joystick_csvs_path().glob(f'**/*.csv'))
+    return get_sessions_from_lists(eaf_list, wav_list, csv_list, mp4_list, pyfeat_csv_list, joystick_csv_list)
+
+def get_aasis_sessions():
+    eaf_list = sorted(aasis_eafs_path().glob(f'**/*.eaf'))
     wav_list = sorted(aasis_wavs_path().glob(f'**/*.wav'))
     csv_list = sorted(aasis_csvs_path().glob(f'**/*.csv'))
     mp4_list = sorted(aasis_mp4s_path().glob(f'**/*.mp4'))
-    for eaf in eafs:
-        eaf_name = eaf.name
-        task = namet.find_task(eaf_name)
-        speakers = namet.find_speakers(eaf_name)
-        wavs = []
-        csvs = []
-        mp4s = []
-        for wav_file_path in find_session_files(wav_list, task, speakers):
-            wavs.append(wav_file_path)
-        for csv_file_path in find_session_files(csv_list, task, speakers):
-            csvs.append(csv_file_path)
-        for mp4_file_path in find_session_files(mp4_list, task, speakers):
-            mp4s.append(mp4_file_path)
-        wavs = get_newest_file_paths(wavs)
-        csvs = get_newest_file_paths(csvs)
-        mp4s = get_newest_file_paths(mp4s)
-        sessions[eaf_name] = {"name": eaf_name, "eaf":eaf, "wavs": wavs, "csvs": csvs, "mp4s":mp4s}
-    return sessions
+    pyfeat_csv_list = sorted(aasis_pyfeat_csvs_path().glob(f'**/*.csv'))
+    joystick_csv_list = sorted(aasis_joystick_csvs_path().glob(f'**/*.csv'))
+    return get_sessions_from_lists(eaf_list, wav_list, csv_list, mp4_list, pyfeat_csv_list, joystick_csv_list)
+
+def print_sessions():
+    print("Finding Local Sessions...")
+    sessions = get_sessions()
+    print_from_sessions(sessions)
 
 def print_aasis_sessions():
-    print("Finding Sessions...")
+    print("Finding Aasis Sessions...")
     sessions = get_aasis_sessions()
+    print_from_sessions(sessions)
+
+def print_from_sessions(sessions):
     for session_key in sessions:
         session = sessions[session_key]
-        print(f"{session["name"]} ({session["eaf"]})")
-        print("\twavs:")
-        for wav in session["wavs"]:
-            print(f"\t\t{wav.name} ({wav})")
-        print("\tcsvs:")
-        for csv in session["csvs"]:
-            print(f"\t\t{csv.name} ({csv})")
-        print("\tmp4s:")
-        for mp4 in session["mp4s"]:
-            print(f"\t\t{mp4.name} ({mp4})")
+        name = session["name"]
+        print(f"{name}")
+        for file_key in session:
+            file_paths = session[file_key]
+            if not isinstance(file_paths, list):
+                continue
+            print(f"\t{file_key}:")
+            for file_path in file_paths:
+                print(f"\t\t{file_path.name} ({file_path.parents[0]})")
         print()
-
-def source_data_from_sessions(sessions):
-    #TODO
-    pass
 
 if __name__ == '__main__':
     globals()[sys.argv[1]]()

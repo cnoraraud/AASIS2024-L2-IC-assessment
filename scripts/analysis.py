@@ -6,22 +6,22 @@ import filtering as filt
 import analysis as ana
 from scipy import stats as sstat
 
-def apply_method_to_feature(data, method, properties):
-    return method(data, properties)
+def apply_method_to_feature(data, method, properties = {}):
+    return method(data, properties = properties)
 
-def apply_method_to_feature_at_i(data, method, properties, i):
-    return apply_method_to_feature(data[i,:], method, properties)
+def apply_method_to_feature_at_i(data, method, i, properties = {}):
+    return apply_method_to_feature(data[i,:], method, properties = properties)
 
-def apply_method_to_all_features(data, method, properties):
-    return apply_method_to_select(data, method, properties, np.any(~np.isnan(data), axis=1))
+def apply_method_to_all_features(data, method, properties = {}):
+    return apply_method_to_select(data, method, np.any(~np.isnan(data), axis=1), properties=properties)
 
-def apply_method_to_select(data, method, properties, select):
+def apply_method_to_select(data, method, select, properties = {}):
     if "destructive" in properties and properties["destructive"]:
         new_data_list = [None] * select.shape[0]
         max_length = 0
         for i in range(select.shape[0]):
             if select[i]:
-                new_data_list[i] = apply_method_to_feature_at_i(data, method, properties, i)
+                new_data_list[i] = apply_method_to_feature_at_i(data, method, i, properties=properties)
                 max_length = max(max_length, new_data_list[i].shape[0])
         new_data = np.empty((len(new_data_list), max_length))
         for i in range(select.shape[0]):
@@ -31,36 +31,36 @@ def apply_method_to_select(data, method, properties, select):
         new_data = np.copy(data)
         for i in range(select.shape[0]):
             if select[i]:
-                new_data[i] = apply_method_to_feature_at_i(data, method, properties, i)
+                new_data[i] = apply_method_to_feature_at_i(data, method, i, properties=properties)
         return new_data
 
-def analyze_feature(data, method, properties, i):
-    return method(data[i,:], properties)
+def analyze_feature(data, method, i, properties={}):
+    return method(data[i,:], properties=properties)
 
 def analyze_all_features(data, method, properties):
-    return analyze_select(data, method, properties, np.any(~np.isnan(data), axis=1))
+    return analyze_select(data, method, np.any(~np.isnan(data), axis=1), properties=properties)
 
-def try_analyze(data, method, properties, select, i):
+def try_analyze(data, method, select, i, properties={}):
     if select[i]:
         try:
-            return analyze_feature(data, method, properties, i), i
+            return analyze_feature(data, method, i, properties=properties), i
         except Exception as e:
             print(f"Exception at {i}:\n{e}")
     return None, i
 
-def analyze_select(data, method, properties, select):
+def analyze_select(data, method, select, properties={}):
     parallel = False
     if "parallel" in properties:
         parallel = properties["parallel"]
     if not parallel:
         results = [None] * select.shape[0]
         for i in range(select.shape[0]):
-            results[i], _ = try_analyze(data, method, properties, select, i)
+            results[i], _ = try_analyze(data, method, select, i, properties=properties)
         return results
     else:
         results = [None] * select.shape[0]
         executor = concurrent.futures.ProcessPoolExecutor(8)
-        futures = [executor.submit(try_analyze, data, method, properties, select, i) for i in range(select.shape[0])]
+        futures = [executor.submit(try_analyze, data, method, select, i, properties=properties) for i in range(select.shape[0])]
         concurrent.futures.wait(futures)
         for future in futures:
             result, i = future.result()
@@ -68,29 +68,15 @@ def analyze_select(data, method, properties, select):
         return results
     return None
 
-# This was kind of sketchy
-# Doesn't work if there is speech overlap or no speech.
-# Doesn't return who is starting speaking
-def turn_taking_times_naive(D, L, n=5000):
-    L_filter = npzr.has(L,"text:text")
-    D, L = npzr.do_label_select(D, L, L_filter)
-    D = npzr.flatten_data(D) + 0.11
-    D[0,:] -= D[1,:]
-    D = npzr.flatten_data(D, -0.22)
-    D[0, :] = filt.ma(D[0, :], {"n": n})
-    D = npzr.flatten_data(D, 0.5)
-    D[0, :] = filt.ma(D[0, :], {"n": n})
-    D = npzr.flatten_data(D, 0.5)
-    return np.where(np.diff(D[0, :]) != 0)[0]
-
 # Not as precise but doesn't struggle with edge cases.
 # Assumes it's always someone's turn
-def turn_taking_times_comparative(D, L, n=5000):
+def turn_taking_times_comparative(D, L, n=5000, use_density=False):
     L_filter = npzr.has(L,"text:text") & npzr.double_speaker_filter(L)
     D, L = npzr.do_label_select(D, L, L_filter)
     if np.size(L) < 2:
-        return np.zeros(0), np.full(0,"S0")
+        return np.zeros(0), np.full(0, npw.SPEAKERNONE)
     silence_mask = np.sum(D, axis=0) == 0.0
+    if use_density: D = ana.apply_method_to_all_features(D, filt.to_density, {})
     D = ana.apply_method_to_all_features(D, filt.to_01, {})
     D[:, silence_mask] = np.nan
     D = ana.apply_method_to_all_features(D, filt.interpolate_nans, {})
@@ -99,8 +85,8 @@ def turn_taking_times_comparative(D, L, n=5000):
     diff = np.diff(S1_larger)
     times = np.where(diff != 0)[0]
     S1_starting = diff[times] > 0
-    starting = np.full(times.shape, "S2")
-    starting[S1_starting] = "S1"
+    starting = np.full(times.shape, npw.SPEAKER2)
+    starting[S1_starting] = npw.SPEAKER1
     return times, starting
 
 def find_pearsonr(a, properties):
@@ -128,8 +114,8 @@ def get_segment_overlaps_and_delays(a, properties):
     N = B.shape[0]
     T = a.shape[0]
     peaked = B + a
-    overlap = npzr.flatten_data(peaked,2)
-    gap = npzr.flatten_data(peaked,0,reverse=True) + a - overlap
+    overlap = filt.flatten(peaked, {"threshold": 2})
+    gap = filt.flatten(peaked, {"threshold": 0, "reverse": True}) + a - overlap
     # Find Segments
     starts, ends = get_segments(a)
 
@@ -235,7 +221,7 @@ def group_analyses(L, *args):
         group = {"label": L[i]}
         for j, arg in enumerate(args):
             if arg[i] is None:
-                print(f"Analaysis {j} missing for label {L[i]}")
+                print(f"Analysis {j} missing for label {L[i]}")
                 continue
             group.update(arg[i])          
         groups.append(group)

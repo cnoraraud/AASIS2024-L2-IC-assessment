@@ -69,9 +69,7 @@ def check_data_row(table, key):
 
 def list_eaf_with_regex(regex):
     # wav, eaf naming convention: <4: year><4: recording>_speaker<3: speaker>_task<1: task>_set<2: set>.<extension>
-    config = iot.get_config_private()
-    personal_path = p.Path(config["paths"]["personal_data"]["."])
-    eafs_path = personal_path / config["paths"]["personal_data"]["eafs"]
+    eafs_path = iot.eafs_path()
     eafs_path_list = []
     data_table = dict()
     for eaf in eafs_path.iterdir():
@@ -80,6 +78,8 @@ def list_eaf_with_regex(regex):
             check_data_row(data_table, key)
             data_table[key]["eafpath"] = eaf
             eafs_path_list.append(eaf)
+        else:
+            print(f"Didn't match \'{eaf.name}\'.")
     
     return sorted(eafs_path_list), data_table
 
@@ -134,9 +134,7 @@ def read_wav(wav_names, wavs_path_sr, wavs_path, sr):
             print(f"Could not read {wav_name} due to {e}")
     return wavs
 
-def read_row(eafpath, sr:int=None, do_wav = False):
-    config = iot.get_config_private()
-    personal_path = p.Path(config["paths"]["personal_data"]["."])
+def read_eaf_row(eafpath, sr:int=None, do_wav = False):
     wav_names = []
     mp4_names = []
 
@@ -149,27 +147,25 @@ def read_row(eafpath, sr:int=None, do_wav = False):
     
     wavs = []
     if do_wav:
-        wavs_path = personal_path / config["paths"]["personal_data"]["wavs"]
+        wavs_path = iot.wavs_path()
         wavs_path_sr = wavs_path if sr is None else wavs_path / f"sr{sr}/"
         wavs = read_wav(wav_names, wavs_path_sr = wavs_path_sr, wavs_path = wavs_path, sr = sr)
         
     return eaf, wavs
 
-def read_rows(table, key_whitelist=None, sr:int=None, do_wavs = False):
-    config = iot.get_config_private()
-    personal_path = p.Path(config["paths"]["personal_data"]["."])
-    wavs_path = personal_path / config["paths"]["personal_data"]["wavs"]
+def read_eaf_rows(eaf_table, key_whitelist=None, sr:int=None, do_wavs = False):
+    wavs_path = iot.wavs_path()
     wavs_path_sr = wavs_path if sr is None else wavs_path / f"sr{sr}/"
     
     all_keys = []
     all_rows = []
     all_wavs = []
-    for key in table:
-        if key_whitelist is None or key in key_whitelist:
-            row = table[key]
-            eaf, wavs = read_row(eafpath = row["eafpath"], sr = sr, do_wav = do_wavs)
+    for eaf_key in eaf_table:
+        if key_whitelist is None or eaf_key in key_whitelist:
+            row = eaf_table[eaf_key]
+            eaf, wavs = read_eaf_row(eafpath = row["eafpath"], sr = sr, do_wav = do_wavs)
             row["eaf"] = eaf
-            all_keys.append(key)
+            all_keys.append(eaf_key)
             all_rows.append(row)
             all_wavs.append(wavs)
     return all_keys, all_rows, all_wavs
@@ -177,7 +173,7 @@ def read_rows(table, key_whitelist=None, sr:int=None, do_wavs = False):
 def get_rows(table = None, n = None, start:int = 0, sr:int = None, do_wavs = False):
     if table is None:
         eafs, table = list_eaf()
-    return read_rows(table = data_section(table, start, n), sr = sr, do_wavs = do_wavs)
+    return read_eaf_rows(eaf_table = data_section(table, start, n), sr = sr, do_wavs = do_wavs)
 
 def test_eaf_reading():
     eafs, table = list_eaf()

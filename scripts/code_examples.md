@@ -9,7 +9,7 @@ import npz_reader as npzr
 import data_displayer as dd
 
 name, D, L = npzr.read_DL_from_name("<npz file name>")
-dd.display_all(D,L,name)
+dd.cc(D,L,name)
 ```
 
 There are many more helper functions in `npz_reader.py` for only accessing certain parts of the data. Example usage can be found in `data_displayer.py`.

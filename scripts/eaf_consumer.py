@@ -82,36 +82,62 @@ def sanitize_label(label):
     sanitized_label = sanitized_label.replace(">","")
     sanitized_label = sanitized_label.strip()
     if " " in sanitized_label:
-        sanitized_label = "unk"
+        sanitized_label = "other"
     if "other" in sanitized_label:
         sanitized_label = "other"
     if "nod" in sanitized_label:
         sanitized_label = "nodding"
     if len(sanitized_label) <= 1:
-        sanitized_label = "unk"
+        sanitized_label = "other"
     return sanitized_label
 
 def sanitize_text(text, collapse_languages = True):
-    sanitized_text = text.lower()
+    sanitized_text = text.lower().strip()
+
     if collapse_languages:
         sanitized_text = sanitized_text.replace("<transen>","<trans>")
         sanitized_text = sanitized_text.replace("<transjp>","<trans>")
         sanitized_text = sanitized_text.replace("<transfr>","<trans>")
     
-    sanitized_text = sanitized_text.replace("<bacch>","<bc>")
-    sanitized_text = sanitized_text.replace("<backh>","<bc>")
-    sanitized_text = sanitized_text.replace("<bakch>","<bc>")
-    sanitized_text = sanitized_text.replace("<backch>","<bc>")
+    substitution_map = {
+        "<trans>":
+            ["<transen>",
+             "<transjp>",
+             "<transfr>",
+             "<transsv>"],
+        "<bc>":
+            ["<bacch>",
+            "<backh>",
+            "<bakch>",
+            "<backch>",
+            "<bachch>"],
+        "<garbage>":
+            ["<gabage>",
+             "<garbage>",
+             "<gargbage>",
+             "<unk>",
+             "<other>"
+             "<bgnoise>"],
+        "<laughing>":
+            ["<laugh>",
+             "<laughin>"],
+        "<hesitation>":
+            ["<hesitaiton>",
+             "<hestitation>",
+             "<hesiation>",
+             "<heistation>",
+             "<hesitiation>"],
+        "<paral>":
+            ["<para>"]
+    }
 
-    sanitized_text = sanitized_text.replace("<gabage>","<garbage>")
-    sanitized_text = sanitized_text.replace("<gargbage>","<garbage>")
+    for substitution in substitution_map:
+        if substitution == "<trans>" and not collapse_languages:
+            continue
+        sequences = substitution_map[substitution]
+        for sequence in sequences:
+            sanitized_text = sanitized_text.replace(sequence, substitution)
     
-    sanitized_text = sanitized_text.replace("<laugh>","<laughing>")
-    sanitized_text = sanitized_text.replace("<laughin>","<laughing>")
-
-    sanitized_text = sanitized_text.replace("<hesitaiton>","<hesitation>")
-    sanitized_text = sanitized_text.replace("<hestitation>","<hesitation>")
-    sanitized_text = sanitized_text.replace("<hesiation>","<hesitation>")
     return sanitized_text
 
 def sanitize_labels(labels, tag=""):
@@ -161,39 +187,61 @@ def add_annotations_to_timeseries(a, annotations):
     for annotation in annotations:
         add_annotation_to_timeseries(a, annotation)
 
-def process_eafs(eaf, width):    
+BLOCK_LIST = ["text:other", "text:hesitationhesitation", "hand:other", "text:bgnoise"]
+def block_listed(key, name="unknown eaf"):
+    for block in BLOCK_LIST:
+        if block in key:
+            print(f"Ignoring label \'{block}\' while processing \'{name}\' based on block-list.")
+            return True
+    return False
+
+def process_eaf(eaf, width=None, name="unknown eaf"):    
+    if isinstance(width, type(None)):
+        width = eaf.get_full_time_interval()[1]
+
     # annotate timeseries
     tiers = list(eaf.tiers)
-    
+
     # get annotations
     annotations = dict()
     for tier in tiers:
         annotations[tier] = eaf.get_annotation_data_for_tier(tier)
-    
+
 
     annotation_series = dict()
     for tier in tiers:
         sanitized_tier, sanitized_number = sanitize(tier)
 
-        series = np.zeros(width)
+        if not isinstance(sanitized_number, type(None)):
+            tier_name = f"{sanitized_number}_{sanitized_tier}"
+        else:
+            tier_name = sanitized_tier
+        
         if sanitized_tier in LABELLED_TIERS:
             label_annotations = get_labels_for_tier(sanitized_tier, annotations[tier])
+            
             for label in label_annotations:
                 series = np.zeros(width)
                 add_annotations_to_timeseries(series, label_annotations[label])
-                annotation_series[f"{tier}:{label}"] = series
+                key = f"{tier_name}:{label}"
+                if block_listed(key, name): continue
+                if key not in annotation_series:
+                    annotation_series[key] = np.zeros(width)
+                annotation_series[key] = annotation_series[key] + series
         else:
+            series = np.zeros(width)
+            key = f"{tier_name}"
+            if block_listed(key, name): continue
+            if key not in annotation_series:
+                    annotation_series[key] = np.zeros(width)
             add_annotations_to_timeseries(series, annotations[tier])
-            annotation_series[tier] = series
-
+            annotation_series[key] = annotation_series[key] + series
 
     # create data matrix
     data = np.zeros((width, len(annotation_series)))
     labels = []
-    i = 0
-    for label in annotation_series:
+    for i, label in enumerate(annotation_series):
         data[:, i] = annotation_series[label]
         labels.append(label)
-        i += 1
     
-    return data, labels, annotations
+    return data, labels

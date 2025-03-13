@@ -48,7 +48,7 @@ def data_to_mfcc(data, window_n, hop_n, rate, first_cep = 1, num_ceps = 12):
     return np.array(mfccs)
 
 def find_wavs_ms(wavs):
-    ms_proposals = []
+    ms_proposals = [-1]
     for wav in wavs:
         sr, data_raw, speakers, mics = wav
         R = sr
@@ -56,14 +56,10 @@ def find_wavs_ms(wavs):
         W = round(data_raw.shape[0] / H)
         ms_proposals.append(W)
     ms_proposals = set(ms_proposals)
-    if len(ms_proposals) > 1:
+    if len(ms_proposals) != 0:
         print(f"Invalid number of ms proposals: {len(ms_proposals)}")
-        ms = list(ms_proposals)[0]
-    elif len(ms_proposals) == 0:
-        print(f"Invalid number of ms proposals: {len(ms_proposals)}")
-        ms = 0
-    else:
-        ms = list(ms_proposals)[0]
+    ms = max(list(ms_proposals))
+    if ms <= 0: ms = None
     return ms
 
 def data_to_ms(data, ms, samples_per_ms, aggregate='mean'):
@@ -75,8 +71,9 @@ def data_to_ms(data, ms, samples_per_ms, aggregate='mean'):
         data_ms = np.sum(np.abs(data_stack), axis=1) / samples_per_ms
     return data_ms
 
-def wavs_to_ms(wavs, ms):
-    #ms ignored currently
+
+# TODO fix reading for weird mic/speaker combinations
+def wavs_to_ms(wavs):
     R = None
     H = None
     W = None

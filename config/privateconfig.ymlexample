@@ -1,5 +1,5 @@
-version: "0.1.3"
-date: "2024/12/09"
+version: "0.1.4"
+date: "2025/03/11"
 paths:
   main_data:
     .: "<root dir>"
@@ -7,6 +7,8 @@ paths:
     eafs: "<sub dir>"
     csvs: "<sub dir>"
     mp4s: "<sub dir>"
+    pyfeat_csvs: '<sub dir>'
+    joystick_csvs: '<sub dir>'
   personal_data:
     .: "<root dir>"
     wavs: "<sub dir>"
@@ -15,5 +17,7 @@ paths:
     npys: "<sub dir>"
     csvs: "<sub dir>"
     mp4s: "<sub dir>"
+    pyfeat_csvs: "<sub dir>"
+    joystick_csvs: "<sub dir>"
     figs: "<sub dir>"
     special_data: "<sub dir>"

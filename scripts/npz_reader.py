@@ -6,6 +6,7 @@ import math
 import copy
 import numpy as np
 import io_tools as iot
+import naming_tools as nt
 import numpy_wrapper as npw
 import analysis as ana
 import filtering as filt
@@ -73,22 +74,11 @@ def pmean(d, p=1):
     elif math.isinf(p) and p < 0:
         dm = np.min(d, axis=0, keepdims=True)
     else:
-        dm = (np.sum(d**p, axis=0, keepdims=True)/n) ** (1/p)
+        dm = (np.nansum(d**p, axis=0, keepdims=True)/n) ** (1/p)
     return dm, p
 
-def flatten_data(data, threshold=0.1, reverse=False):
-    flattened_data = np.zeros_like(data)
-    if not reverse:
-        flattened_data[data >= threshold] = 1
-    if reverse:
-        flattened_data[data <= threshold] = 1
-    return flattened_data
-
-def norm_data(data):
-    data_c = data - np.mean(data,axis=1, keepdims=True)
-    return data_c / np.max(np.abs(data_c),axis=1, keepdims=True)
-
-def find_speakers_from_name(name):
+# FINDS NUMBERS
+def find_speaker_numbers(name):
     speakers = []
     matches = re.findall(r"speaker\d{3}",name)
     for match in matches:
@@ -96,13 +86,30 @@ def find_speakers_from_name(name):
         speakers.append(speaker)
     return speakers
 
-def anonymize_speakers(labels, speakers):
-    # label errors
-    new_labels = replace_labels(labels, "sspeaker","speaker")
-    new_labels = replace_labels(new_labels, "speakerspeaker","speaker")
-    new_labels = replace_labels(new_labels, speakers[0], npw.SPEAKER1)
-    new_labels = replace_labels(new_labels, speakers[1], npw.SPEAKER2)
-    return new_labels
+def anonymize_speakers(labels):
+    source_map = dict()
+    new_labels = []
+    for label in labels:
+        sources = nt.find_sources(label)
+        anon_sources = []
+        for source in sources:
+            anon_source = nt.get_anon_source(source)
+            anon_sources.append(anon_source)
+            if source not in source_map:
+                source_map[source] = anon_source
+            if source_map[source] != anon_source:
+                print("Duplicated sources given same anonymous title.")
+                print("Possible presumptions broken:\n")
+                print("\t- Only 2 speakers present.")
+                print("\t- One speaker always even numbered, the other always odd")
+        new_source = "-".join(anon_sources)
+        tag = nt.find_tag(label)
+        feature = nt.find_feature(label)
+        extra = nt.find_extra(label)
+        new_label = nt.create_label(new_source, tag, feature, extra)
+        new_labels.append(new_label)
+    return npw.string_array(new_labels)
+
 
 def double_speaker_filter(labels):
     return ~(has(labels, npw.SPEAKER1) & has(labels, npw.SPEAKER2))
@@ -124,25 +131,21 @@ def print_npz():
         print(name)
 
 def read_DL_metadata_from_name(name):
-    if ".npz" not in name:
-        name = name + ".npz"
+    name = nt.file_swap(name, "npz")
     return read_DL_metadata(iot.npzs_path() / name)
         
 def read_DL_from_name(name):
-    if ".npz" not in name:
-        name = name + ".npz"
+    name = nt.file_swap(name, "npz")
     return read_DL(iot.npzs_path() / name)
 
 def read_sanitized_DL(path):
     name, D, L = read_DL(path)
-    speakers = find_speakers_from_name(name)
-    L_anon = anonymize_speakers(L, speakers)
+    L_anon = anonymize_speakers(L)
     D_s, L_anon = focus_on_label(D, L_anon, "performance")
     return name, D_s, L_anon
 
 def read_sanitized_DL_from_name(name):
-    if ".npz" not in name:
-        name = name + ".npz"
+    name = nt.file_swap(name, "npz")
     return read_sanitized_DL(iot.npzs_path() / name)
 
 def read_DL_metadata(path):
@@ -269,9 +272,9 @@ def get_entire_data_as_segment(npz_name, selection):
 
 
 
-def get_turn_taking_data_segments(npz_name, selection, n = 5000):
+def get_turn_taking_data_segments(npz_name, selection, n = 5000, use_density=False):
     name, D, L = read_sanitized_DL_from_name(npz_name)
-    time_frames, starting_speakers = ana.turn_taking_times_comparative(D, L, n=n)
+    time_frames, starting_speakers = ana.turn_taking_times_comparative(D, L, n=n, use_density=use_density)
     start = 0
     end = D.shape[1]
     segments = []
@@ -375,7 +378,6 @@ def combined_segment_matrix_with_interpolation(segments):
 
     return all_labels, total_matrix
 
-
 def running_combined_segment_matrix(segments):
     all_labels = npw.string_array(get_all_segment_labels(segments))
     max_segment_length, mid_point = get_max_segment_lengths(segments)
@@ -403,8 +405,8 @@ def running_combined_segment_matrix(segments):
 def get_all_features():
     features = set()
     for npz in npz_list():
-        for npz_feature in read_DL_from_name(npz)[2].tolist():
-            features.add(npz_feature.split(" ")[2])
+        for label in read_DL_from_name(npz)[2].tolist():
+            features.add(nt.find_feature(label))
     return sorted(list(features))
         
 if __name__ == '__main__':
