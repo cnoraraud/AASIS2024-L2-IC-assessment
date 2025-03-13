@@ -60,6 +60,7 @@ def create_data(key, row, wavs):
     eaf = row['eaf']
     name = row['eafpath'].name
     annotation_data, annotation_labels = ec.process_eaf(eaf, ms, name=name)
+    #TODO: use nt.create_label()
     D = np.concatenate([extraction_data, annotation_data], axis=1).T
     L = np.concatenate([ec.sanitize_labels(extraction_labels, tag="(ext.)"), ec.sanitize_labels(annotation_labels, tag="(ann.)")])
     return D, L

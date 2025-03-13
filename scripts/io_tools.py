@@ -101,7 +101,7 @@ def get_csv_names_facial_features(name):
     session = get_related_session_for_file(name, use_defaults=False, pyfeat_csv_list=pyfeat_csv_list)
     return session["pyfeat_csvs"]
 
-def get_csv_names_joystick(eaf_name):
+def get_csv_paths_joystick_discrete(eaf_name):
     annotators = ["il","jk"]
     versions = ["001", "002"]
     base_name = eaf_name
@@ -116,6 +116,12 @@ def get_csv_names_joystick(eaf_name):
                 csv_names.append(csv_name)
     return csv_names
 
+def get_csv_paths_joystick(name):
+    joystick_csv_list = joystick_csvs_path().glob(f'**/*.csv')
+    session = get_related_session_for_file(name, use_defaults=False, joystick_csv_list=joystick_csv_list)
+    return session["joystick_csvs"]
+
+#@deprecated("Use fuzzy sourcing instead")
 def source_annotated_data_discrete():
     config = get_config_private()
     aasis_path = p.Path(config["paths"]["main_data"]["."])
@@ -158,7 +164,7 @@ def source_annotated_data_discrete():
                         else:
                             manifest.write(f"\t{annotation}: wav {wav_name} not found\n")
                 # find csvs possibilities
-                csv_names = get_csv_names_joystick(eaf_annotation)
+                csv_names = get_csv_paths_joystick_discrete(eaf_annotation)
                 csvs = []
                 for csv_name in csv_names:
                     if not p.Path(csvs_dst_path / csv_name).exists():

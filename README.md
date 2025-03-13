@@ -8,7 +8,7 @@ This project assumes that files have meaningful and consistent names.
 
 1. Make a copy of `privateconfig.ymlexample` and rename it to `privateconfig.yml`. Fill it with values.
 
-   1. The code assumes you are copying data from central storage to your own storage within the same filesystem.
+   1. The code assumes you are copying data from a central storage to your own storage within the same filesystem.
 2. Create a python environment from `l2ic_env.yml`, and activate it.
 3. Change directory to `scripts` and run `python processing.py data_pipeline`. The script attempts to do the following:
 
@@ -25,4 +25,4 @@ This project assumes that files have meaningful and consistent names.
 
 ## Working with the data
 
-See in the [code examples readme](scripts/code_examples.md).
+See in the [code examples](scripts/code_examples.md) readme.

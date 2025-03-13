@@ -177,14 +177,14 @@ def plot_feature(matrix, labels, feature_name, task_name, mid_point=None, save_f
     else:
         plt.show()
 
-def produce_figures_turn_taking(task_name, feature_name, n = 5000):
+def produce_figures_turn_taking(task_name, feature_name, n = 5000, use_density = False):
     total_segments = []
     # if there is no limit for ram usage, the whole data could be collected instead
     # for every segment and you would only have to do one pass of file reads
     # to produce all the graphs
     for npz in npzr.npz_list():
         if task_name in npz:
-            segments = npzr.get_turn_taking_data_segments(npz, [[("has",feature_name)]], n = n)
+            segments = npzr.get_turn_taking_data_segments(npz, [[("has",feature_name)]], n = n, use_density = use_density)
             total_segments += segments
     TL, TD, mid_point = npzr.combined_segment_matrix_with_anchor(total_segments)
     plot_feature(TD, TL, feature_name, task_name, mid_point = mid_point, save_fig=True)
@@ -210,7 +210,7 @@ def produce_all_figures_turn_taking():
     for task_name in ["task5","task4A","task4B"]:
         for feature_name in feature_names:
             try:
-                produce_figures_turn_taking(task_name, feature_name, n = 10000)
+                produce_figures_turn_taking(task_name, feature_name, n = 10000, use_density = False)
             except Exception as e:
                 print(f"Failed to produce figure for {task_name} {feature_name}")
                 print(traceback.format_exc())

@@ -46,7 +46,7 @@ def get(obj, path, supress_escape=False, search_in_children=False, fallback=None
         elif keyword in current_obj:
             current_obj = current_obj[keyword]
         elif search_in_children:
-            #TODO
+            #TODO: would be nice to search necessary stuff in children if can't find in yourself, looser pathing...
             raise NotImplementedError("search_in_children is not implemented")
         else:
             return fallback
@@ -258,5 +258,5 @@ def map_samples_to_common_matrix(all_samples):
         self_mask = np.isin(all_self_labels, self_labels)   
         other_mask = np.isin(all_other_labels, other_labels)
     
-    #TODO
+    #TODO: The big one
         

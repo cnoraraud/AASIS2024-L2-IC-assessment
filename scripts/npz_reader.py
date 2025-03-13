@@ -270,8 +270,6 @@ def get_entire_data_as_segment(npz_name, selection):
                "data": data}
     return [segment]
 
-
-
 def get_turn_taking_data_segments(npz_name, selection, n = 5000, use_density=False):
     name, D, L = read_sanitized_DL_from_name(npz_name)
     time_frames, starting_speakers = ana.turn_taking_times_comparative(D, L, n=n, use_density=use_density)
@@ -294,6 +292,37 @@ def get_turn_taking_data_segments(npz_name, selection, n = 5000, use_density=Fal
     del D
     del L
     return data_segments
+
+def get_turn_taking_features(times, starting, t_max):
+    speakers = sorted(np.unique(starting).tolist())
+    starting_list = starting.tolist()
+    times_list = times.tolist()
+
+    # Assume the first person to speak is the last person to speak next
+    speaker_counter = copy.deepcopy(speakers)
+    for starting_speaker in starting:
+        if len(speaker_counter) == 1:
+            break
+        speaker_counter.remove(starting_speaker)
+    assumed_first_speaker = speaker_counter[0]
+
+    starting_list.insert(0,assumed_first_speaker)
+    times_list.append(t_max)
+    prev_time = 0
+    D = np.zeros((len(speakers), t_max))
+    for starting_speaker, t_frame in zip(starting_list, times_list):
+        starting_index = prev_time
+        end_index = t_frame
+        speaker_index = speakers.index(starting_speaker)
+        D[speaker_index, starting_index:end_index] = 1
+        prev_time = t_frame
+
+    labels = []
+    for speaker in speakers:
+        labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "ic:turn"))
+    L = npw.string_array(labels)
+    
+    return D, L
 
 def get_all_segment_labels(segments):
     labels = set()

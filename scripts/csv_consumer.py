@@ -1,10 +1,11 @@
 import sys
 import pathlib as p
 import numpy as np
-import numpy_wrapper as npw
-import io_tools as iot
 import pandas as pd
 from scipy import interpolate
+import numpy_wrapper as npw
+import io_tools as iot
+import naming_tools as nt
 
 # TODO: similar function in filtering.py... combine somehow?
 def fit_to_data(x,y,t_max=None, kind="linear"):
@@ -28,38 +29,36 @@ def time_string_to_ms(time_string):
         ms += val * mult    
     return ms
 
-def get_joystick_data(js, t_max=None):
-    x = []
-    y = []
-    with open(iot.joystick_csvs_path() / js, "r") as f:
-        while line := f.readline():
-            line = line.strip()
-            if line[0] == "#":
-                continue
-            values = line.split(",")
-            t = round(float(values[0].strip())*1000)
-            x_js = int(values[1].strip())
-            y_js = int(values[2].strip())
-            f_js = int(values[3].replace(";","").strip())
-            features = [x_js, y_js, f_js]
-            x.append(t)
-            y.append(features)
-    x = np.array(x)
-    y = np.array(y)
-    fires = np.where(y[:,2]==1)[0]
-    valid_range = range(fires[0], fires[1])
-    x = x[valid_range]
-    y = y[valid_range,0:2]
-    x = x - x.min()
-    y = (y-500)/500
-    xs = []
-    ys = []
-    for i in range(y.shape[1]):
-        x_new, y_new = fit_to_data(x,y[:,i],t_max=t_max)
-        xs.append(x_new)
-        ys.append(y_new)
-    y = np.concatenate([ys])
-    return y
+def pd_to_DL(df_ms, df_data, t_max=None):
+    # CONVERT TO DL framework
+    t = df_ms.to_numpy()
+    D_raw = df_data.to_numpy().T
+    L = npw.string_array(df_data.columns.to_list())
+
+    # CONVERT TO SHAPE
+    if isinstance(t_max, type(None)):
+        t_max = t.max()
+    new_shape = (L.shape[0], t_max)
+    D = np.full(new_shape, 0.0)
+    for i in range(L.shape[0]):
+        d = D_raw[i,:]
+        not_nan_mask = ~np.isnan(d)
+        _, new_d = fit_to_data(t[not_nan_mask], d[not_nan_mask], t_max=t_max)
+        D[i,:] = new_d
+    return D, L
+
+def get_joystick_data(csv_name, t_max=None):
+    df = pd.read_csv(iot.joystick_csvs_path() / csv_name, skip_blank_lines=True, comment="#", header=None)
+    df.columns = ["time", "x", "y", "f"]
+    df["ms"] = np.round(df["time"]*1000).astype(int)
+    valid_range = df[df["f"] == 1]["ms"].tolist()
+    df = df[(df["ms"] > valid_range[0]) & (df["ms"] < valid_range[-1])]
+
+    good_cols = ["x", "y"]
+    df_ms = df["ms"]
+    df_good = df[good_cols]
+
+    return pd_to_DL(df_ms, df_good, t_max)
 
 def get_pyfeat_data(csv_name, t_max=None):
     # LOAD CSV
@@ -114,69 +113,51 @@ def get_pyfeat_data(csv_name, t_max=None):
     df_ms = df["ms"]
     df_good = df[good_cols]
 
-    # CONVERT TO DL framework
-    t = df_ms.to_numpy()
-    D_raw = df_good.to_numpy().T
-    L = npw.string_array(df_good.columns.to_list())
-
-    # CONVERT TO SHAPE
-    if isinstance(t_max, type(None)):
-        t_max = t.max()
-    new_shape = (L.shape[0], t_max)
-    D = np.full(new_shape, 0.0)
-    for i in range(L.shape[0]):
-        d = D_raw[i,:]
-        not_nan_mask = ~np.isnan(d)
-        _, new_d = fit_to_data(t[not_nan_mask], d[not_nan_mask], t_max=t_max)
-        D[i,:] = new_d
-    return D, L
+    return pd_to_DL(df_ms, df_good, t_max)
             
 
-def add_facial_features_to_data(name, D, L):
+def add_facial_features_to_data(data_name, D, L):
     Ds = [D]
     Ls = [L]
-    for csv_path in iot.get_csv_names_facial_features():
-        csv_name = p.Path(csv_path).name
-        ff_D, ff_L = get_pyfeat_data(csv_name, t_max=D.shape[1])
+    t_max = D.shape[1]
+    for csv_path in iot.get_csv_names_facial_features(data_name):
+        ff_D, ff_L = get_pyfeat_data(csv_path, t_max=t_max)
+
+        name = nt.file_swap(nt.get_name(csv_path))
+        source = nt.compact_sources(nt.speakers_to_sources(nt.find_speakers(name)))
+        tag = nt.ANNOTATION_TAG
+        
+        new_l = []
+        for feature in ff_L:
+            new_l.append(nt.create_label(source, tag, f"{feature}"))
         Ds.append(ff_D)
-        Ls.append(ff_L)
+        Ls.append(npw.string_array(new_l))
+
 
     D_concat = np.concat(Ds, axis=0)
     L_concat = np.concat(Ls, axis=0)
-    return name, D_concat, L_concat
+    return data_name, D_concat, L_concat
 
-# TODO: Refactor get_joysticks_for_D with fuzzy features like in get_facial_features_for_D
-
-def add_joysticks_to_data(name, D, L):
-    new_D = np.copy(D)
-    new_L = np.copy(L)
-    stem_name = "_".join(name.split("_")[:-1])
+def add_joysticks_to_data(data_name, D, L):
+    Ds = [D]
+    Ls = [L]
     t_max = D.shape[1]
-    series = []
-    labels = []
-    for csv_name in iot.get_csv_names_joystick(stem_name):
-        if csv_name not in iot.list_dir(iot.csvs_path(), "csv"):
-            continue
-        csv_values = csv_name.split("_")
-        speaker = csv_values[-3][-3:]
-        annotator = csv_values[-2]
-        version = csv_values[-1][:3]
-        new_Lx = f"{speaker} (ann.) js:x {annotator} {version}"
-        new_Ly = f"{speaker} (ann.) js:y {annotator} {version}"
-        joystick_data = get_joystick_data(csv_name, t_max)
-        x_data = joystick_data[0,:]
-        y_data = joystick_data[1,:]
-        if new_Lx not in L:
-            series.append(x_data)
-            labels.append(new_Lx)
-        else:
-            new_D[np.where(L == new_Lx)[0][0],:] = x_data
-        if new_Ly not in L:
-            series.append(y_data)
-            labels.append(new_Ly)
-        else:
-            new_D[np.where(L == new_Ly)[0][0],:] = y_data
-    if len(series) > 0 and len(labels) > 0:
-        new_D = np.concat([new_D, np.array(series)], axis=0)
-        new_L = np.concat([L, np.array(labels)], axis=0)
-    return name, new_D, new_L
+    for csv_path in iot.get_csv_paths_joystick(data_name):
+        js_D, js_L = get_joystick_data(csv_path, t_max=t_max)
+
+        name = nt.file_swap(nt.get_name(csv_path))
+        source = nt.compact_sources(nt.speakers_to_sources(nt.find_speakers(name)))
+        tag = nt.ANNOTATION_TAG
+        annotator = nt.find_annotator(name)
+        version = nt.find_version(name)
+        extra = f"{version}"
+        
+        new_l = []
+        for feature in js_L:
+            new_l.append(nt.create_label(source, tag, f"{feature}:{annotator}", extra))
+        Ds.append(js_D)
+        Ls.append(npw.string_array(new_l))
+
+    D_concat = np.concat(Ds, axis=0)
+    L_concat = np.concat(Ls, axis=0)
+    return data_name, D_concat, L_concat

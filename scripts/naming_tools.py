@@ -6,10 +6,10 @@ def get_name(path):
     return p.Path(path).name
 
 def file_swap(path, to=None):
-    to = to.replace(".","")
     if isinstance(to, type(None)):
         return p.Path(path).stem
     else:
+        to = to.replace(".","")
         return f"{p.Path(path).stem}.{to}"
 
 def find_speakers(name):
@@ -46,25 +46,59 @@ def find_mic(name):
         mic = mic_match[0]
         mics.append(mic)
 
+def get_at_most_nth(slots, n=3):
+    candidate = None
+    if len(slots) >= n:
+        candidate = slots[n-1]
+    elif len(slots) > 0:
+        candidate = slots[-1]
+    return candidate
+
+def get_last_slots_as_candidates(slots, n=2):
+    candidates = []
+    for i in range(1,n+1):
+        if len(slots) >= i:
+            candidates.append(slots[-i])
+    return candidates
+
 def find_annotator(name):
     name = file_swap(get_name(name))
     slots = name.split("_")
-    if len(slots) < 1:
-        return None
-    candidate = slots[-1]
-    r_ann = r"\w\w"
-    if not re.match(r_ann, candidate):
-        return None
-    return candidate.lower()
+    suitable = "unknown_annotator"
+    for candidate in get_last_slots_as_candidates(slots, 2):
+        r_ann = r"[a-zA-Z]{2}"
+        if not re.match(r_ann, candidate):
+            continue
+        suitable = candidate.lower()
+        break
+    return suitable
+
+def find_version(name):
+    name = file_swap(get_name(name))
+    slots = name.split("_")
+    suitable = "unknown_version"
+
+    r_version = r"(^|-|take|v(er(s(ion)?)?)?)\d+"
+    r_number = r"\d+"
+    for candidate in get_last_slots_as_candidates(slots, 2):
+        version_numbers = []
+        for version_match in re.finditer(r_version, candidate):
+            for number_match in re.finditer(r_number, version_match[0]):
+                match_val = number_match[0]
+                # Probably unnecessary
+                if match_val.isnumeric():
+                    version_numbers.append(to_name_number(match_val))
+                
+        if len(version_numbers) > 0:
+            suitable = "-".join(version_numbers)
+            break
+    return suitable
 
 def find_feature(label):
     slots = label.split(" ")
-    if len(slots) == 0:
-        return "unknown_feature"
-    elif len(slots) < 3:
-        return slots[-1]
-    else:
-        return slots[2]
+    candidate = get_at_most_nth(slots, 3)
+    if candidate: return candidate
+    return "unknown_feature"
 
 ANNOTATION_TAG = "(ann.)"
 EXTRACTION_TAG = "(ext.)"
@@ -80,7 +114,7 @@ ALL_SOURCE = "[all]"
 def find_sources(label):
     slots = label.split(" ")
     if len(slots) == 0:
-        return "unknown source"
+        return "unknown_source"
     candidate = slots[0]
     candidate = candidate.split(":")[0]
     sources = []
@@ -89,15 +123,17 @@ def find_sources(label):
     sources.extend(to_sources(candidate))
     return sources
 
+def to_name_number(number_string):
+    number_int = int(number_string)
+    number = str(number_int)
+    number = number.rjust(3, "0")
+    return number
+
 def to_sources(candidate):
     sources = []
     r_number = r"\d+"
     for number_match in re.finditer(r_number, candidate):
-        number = number_match[0]
-        number_int = int(number)
-        number = str(number_int)
-        number = number.rjust(3, "0")
-        sources.append(number)
+        sources.append(to_name_number(number_match[0]))
     return sources
 
 def speakers_to_sources(speakers):
@@ -117,6 +153,9 @@ def get_anon_source(source):
         if int(source) % 2 == 0:
             return npw.SPEAKER2
     return npw.SPEAKERNONE
+
+def compact_sources(sources):
+    return "-".join(sorted(list(set(sources))))
 
 def find_extra(label):
     slots = label.split(" ")
