@@ -1,7 +1,7 @@
-import data_displayer as dd
-import npz_reader as npzr
 import traceback
 from datetime import datetime
+import data_displayer as dd
+import npz_reader as npzr
 
 def tprint(log_string):
     today = datetime.now()

@@ -1,11 +1,9 @@
-import os
-import time
 from datetime import datetime
+import numpy as np
+import npz_reader as npzr
 import io_tools as iot
 import naming_tools as nt
-import npz_reader as npzr
 import analysis as ana
-import numpy as np
 import filtering as filt
 
 def write_summary(name, summary):

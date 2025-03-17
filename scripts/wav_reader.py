@@ -1,8 +1,19 @@
 import matplotlib.pyplot as plt
 import scipy.signal as sig
 import scipy.fft as fft
+from scipy.io import wavfile
 import numpy as np
 import filtering as filt
+import io_tools as iot
+import naming_tools as nt
+import numpy_wrapper as npw
+import traceback
+
+def list_wavs():
+    wavs = []
+    for name in iot.list_dir(iot.wavs_path(), "wav"):
+        wavs.append(name)
+    return wavs
 
 def stereo_to_mono(data):
     # For some audios, one of the channels might be usable for a noise profile
@@ -17,13 +28,6 @@ def print_wav(wav):
     plt.title(f"sr: {sr} sec: {data.shape[0]/sr} speakers: {speakers} mics: {mics}")
     print(len(speakers))
     plt.show()
-
-def normalize(data):
-    data_c = np.mean(data)
-    c_data = data - data_c
-    c_data_s = np.max(np.abs(c_data))
-    cs_data = c_data / c_data_s
-    return cs_data
 
 def data_to_mfcc(data, window_n, hop_n, rate, first_cep = 1, num_ceps = 12):
     pad_n = window_n - hop_n
@@ -50,13 +54,14 @@ def data_to_mfcc(data, window_n, hop_n, rate, first_cep = 1, num_ceps = 12):
 def find_wavs_ms(wavs):
     ms_proposals = [-1]
     for wav in wavs:
-        sr, data_raw, speakers, mics = wav
-        R = sr
+        data = wav["data"]
+        sr = wav["sr"]
+        R = int(sr)
         H = round(R / 1000)
-        W = round(data_raw.shape[0] / H)
+        W = round(data.shape[0] / H)
         ms_proposals.append(W)
     ms_proposals = set(ms_proposals)
-    if len(ms_proposals) != 0:
+    if len(ms_proposals) != 1:
         print(f"Invalid number of ms proposals: {len(ms_proposals)}")
     ms = max(list(ms_proposals))
     if ms <= 0: ms = None
@@ -71,54 +76,66 @@ def data_to_ms(data, ms, samples_per_ms, aggregate='mean'):
         data_ms = np.sum(np.abs(data_stack), axis=1) / samples_per_ms
     return data_ms
 
-
-# TODO fix reading for weird mic/speaker combinations
-def wavs_to_ms(wavs):
-    R = None
-    H = None
-    W = None
-    N = len(wavs)
-
+def wavs_to_ms(wavs, window_n = 1000, first_cep = 1, num_ceps = 12, left_mics = ["mic1"], right_mics = ["mic2"], gen_mics = ["mic3", "mic4", "mic5"]):
     datas = []
     labels = []
-    
+
+    hop = -1
+    width = -1
     for wav in wavs:
-        sr, data_raw, speakers, mics = wav
-        if R is None:
-            R = sr
-        if H is None:
-            H = round(R / 1000)
-        if W is None:
-            W = round(data_raw.shape[0] / H)
+        data = wav["data"]
+        sr = wav["sr"]
+        hop = max(hop, round(sr / window_n))
+        width = max(width, round(data.shape[0] / hop))
+        
+    # SC, MC, Outcome
+    #  1,  1, - wav belongs to single speaker
+    #  2,  2, - shared microphone
+    #  2,  1, - depends on microphone name
+    #         * mic3, mic4, mic5: wav belongs to [all]
+    #         * mic1, mic2: wav belongs to speaker 1 or speaker 2
+    for wav in wavs:
+        data = wav["data"]
+        sr = wav["sr"]
+        speakers = wav["speakers"]
+        mics = wav["mics"]
+        SC = len(speakers)
+        MC = len(mics)
 
-        if len(speakers) > 1 and len(mics) > 1:
-            continue
+        if SC == 1 and MC == 1:
+            speaker = speakers[0]
+        elif SC == 2 and MC == 2:
+            speaker = nt.ALL_SOURCE
+        elif SC == 2 and MC == 1:
+            mic = mics[0]
+            if mic in left_mics:
+                speaker = min(speakers)
+            elif mic in right_mics:
+                speaker = max(speakers)
+            elif mic in gen_mics:
+                speaker = nt.ALL_SOURCE
+            else:
+                raise ValueError(f"Unknown mic {mic}. Don't know how to assign it to sources ({SC}).")
+        else:
+            raise ValueError(f"Strange speaker ({SC}) and mic counts ({MC}). {speakers} {mics}")
 
-        name = "-".join(speakers)
-        if (len(speakers) > 1):
-            name += f"mic:{mics[0]}"
-    
-        data = normalize(data_raw)
+
+        data = filt.norm(data)
         data = stereo_to_mono(data)
-
-        window_n = 1000
-        hop_n = H
-
-        first_cep = 1
-        num_ceps = 12
-        ceps = data_to_mfcc(data, window_n, hop_n, sr, first_cep = first_cep, num_ceps = num_ceps)
-        energy = data_to_ms(data, W, H, aggregate='energy')
+        ceps = data_to_mfcc(data, window_n, hop, sr, first_cep = first_cep, num_ceps = num_ceps)
+        energy = data_to_ms(data, width, hop, aggregate='energy')
         vad = energy_to_vad(energy)
 
         for i in range(num_ceps):
             datas.append(ceps[:, i])
-            labels.append(f"{name}_cep:{i + first_cep}")
+            cep_name = f"cep:{i + first_cep}"
+            labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, cep_name))
         datas.append(energy)
+        labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "energy"))
         datas.append(vad)
-        labels.append(f"{name}_energy")
-        labels.append(f"{name}_vad")
+        labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "vad"))
 
-    return np.array(datas).T, labels
+    return np.array(datas).T, npw.string_array(labels)
 
 def get_fbank(nfft, rate, nfilt = 40):
     # Cite for MFCC: https://haythamfayek.com/2016/04/21/speech-processing-for-machine-learning.html
@@ -155,6 +172,43 @@ def energy_to_vad(data):
     ms = 2000
     ms_th = 0.15
     return filt.ma(dbs > th_db, {"n": ms}) > ms_th
+
+def resample_wav(wav_name, sr):
+    sr0, data0 = wavfile.read((iot.wavs_path() / wav_name).as_posix())
+    t0 = np.shape(data0)[0]
+    sr1 = sr
+    t1 = round(sr1/sr0 * t0)
+    data1 = sig.resample(data0, t1) # design choice
+    iot.create_wavs_sr_folder(sr)
+    wavfile.write((iot.wavs_path(sr) / wav_name).as_posix(), sr1, data1)
+    print(f"Resampled from {t0} to {t1}")
+    return sr1, data1
+
+def read_wav(wav_path, sr):
+    wav_name = nt.file_swap(nt.get_name(wav_path),"wav")
+    data = None
+    if (iot.wavs_path(sr) / wav_name).exists():
+        new_sr, data = wavfile.read((iot.wavs_path(sr) / wav_name).as_posix())
+    else:
+        new_sr, data  = resample_wav(wav_name, sr)
+    return data, new_sr
+
+def read_wavs(wav_paths, sr):
+    wavs = []
+    for wav_path in wav_paths:
+        try:
+            data, new_sr = read_wav(wav_path, sr=sr)
+            speakers = nt.speakers_to_sources(nt.find_speakers(wav_path))
+            mics = nt.find_mics(wav_path)
+            wav = {"data": data,
+                    "sr": new_sr,
+                    "speakers": speakers,
+                    "mics": mics}
+            wavs.append(wav)
+        except Exception as e:
+            print(f"Could not read {wav_path} due to {e}")
+            print(traceback.format_exc())
+    return wavs
 
 def DB(data):
     return 20*np.log10(data)

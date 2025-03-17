@@ -1,14 +1,10 @@
 import sys
 import re
-import pathlib as p
 
-import numpy as np
-from scipy.io import wavfile
 from pympi import Elan as elan
 
+import wav_reader as wavr
 import io_tools as iot
-import elan_tools as elant
-import wav_tools as wavt
 
 def num_to_n_chars(num:int, n:int):
     return str(num).rjust(n, "0")[-n:]
@@ -91,89 +87,37 @@ def data_section(table, start = 0, n = None):
         n = len(table) - start
     return dict(list(table.items())[start : start + n]) # dictionaries are ordered as of python 3.7
 
-def get_r_name(r, id, wav_name):
-    name_stem = wav_name.split(".")[0]
-    match = re.search(r, name_stem)
-    group = match.group()
-    uncleaned = tuple(group.split(id)[1:])
-    return uncleaned
-
-def get_speaker_name(wav_name):
-    rspeaker = r"(speakers?([\d])+)+"
-    return get_r_name(rspeaker, "speaker", wav_name)
-
-def get_mic_name(wav_name):
-    rmic = r"(mics?([0-9a-z])+)+"
-    return get_r_name(rmic, "mic", wav_name)
-
-def read_wav(wav_names, wavs_path_sr, wavs_path, sr):
-    wavs = []
-    for wav_name in wav_names:
-        try:
-            wav_path_sr = wavs_path_sr / wav_name
-            wav_path = wavs_path / wav_name
-            wav = None
-            sr0 = None
-            data0 = None
-            speakers0 = get_speaker_name(wav_name)
-            mics0 = get_mic_name(wav_name)
-            if not wavs_path_sr.exists():
-                wavs_path_sr.mkdir(parents=True, exist_ok=False)
-            
-            if wav_path_sr.exists():
-                sr0, data0 = wavfile.read(wav_path_sr.as_posix())
-                wav = (sr0, data0, speakers0, mics0)
-            elif wav_path.exists():
-                sr0, data0 = wavt.resample_wavs(wav_path = wav_path, wav_path_sr = wav_path_sr, sr = sr)
-                wav = (sr0, data0, speakers0, mics0)
-            
-            if wav is not None:
-                wavs.append(wav)
-
-        except Exception as e:
-            print(f"Could not read {wav_name} due to {e}")
-    return wavs
-
-def read_eaf_row(eafpath, sr:int=None, do_wav = False):
-    wav_names = []
-    mp4_names = []
-
-    # populate eaf
-    try:
-        eaf = elan.Eaf(eafpath)
-        wav_names, mp4_names = elant.get_wav_names(eaf)
-    except:
-        print(f"Could not read {eafpath}")
+def read_session_files(eafpath, sr:int=None, do_wav = False):
+    eaf = elan.Eaf(eafpath)
+    # The wav_list used to be pulled out of the eaf file, but this wasn't done consistently,
+    # so now we're pulling them fuzzily
+    wav_paths = iot.get_wav_paths(eafpath)
     
     wavs = []
     if do_wav:
-        wavs_path = iot.wavs_path()
-        wavs_path_sr = wavs_path if sr is None else wavs_path / f"sr{sr}/"
-        wavs = read_wav(wav_names, wavs_path_sr = wavs_path_sr, wavs_path = wavs_path, sr = sr)
-        
-    return eaf, wavs
+        wavs = wavr.read_wavs(wav_paths, sr = sr)
+    mp4s = []
 
-def read_eaf_rows(eaf_table, key_whitelist=None, sr:int=None, do_wavs = False):
-    wavs_path = iot.wavs_path()
-    wavs_path_sr = wavs_path if sr is None else wavs_path / f"sr{sr}/"
-    
+    return eaf, wavs, mp4s
+
+def read_session(sessions, key_whitelist=None, sr:int=None, do_wavs = False):
     all_keys = []
-    all_rows = []
+    all_sessions = []
     all_wavs = []
-    for eaf_key in eaf_table:
-        if key_whitelist is None or eaf_key in key_whitelist:
-            row = eaf_table[eaf_key]
-            eaf, wavs = read_eaf_row(eafpath = row["eafpath"], sr = sr, do_wav = do_wavs)
+    for session_key in sessions:
+        if key_whitelist is None or session_key in key_whitelist:
+            row = sessions[session_key]
+            eaf, wavs, mp4s = read_session_files(eafpath = row["eafpath"], sr = sr, do_wav = do_wavs)
             row["eaf"] = eaf
-            all_keys.append(eaf_key)
-            all_rows.append(row)
+            all_keys.append(session_key)
+            all_sessions.append(row)
             all_wavs.append(wavs)
-    return all_keys, all_rows, all_wavs
+    return all_keys, all_sessions, all_wavs
 
-def get_rows(table = None, n = None, start:int = 0, sr:int = None, do_wavs = False):
+def get_sessions(table = None, n = None, start:int = 0, sr:int = None, do_wavs = False):
     if table is None:
         eafs, table = list_eaf()
-    return read_eaf_rows(eaf_table = data_section(table, start, n), sr = sr, do_wavs = do_wavs)
+    return read_session(sessions = data_section(table, start, n), sr = sr, do_wavs = do_wavs)
 
 def test_eaf_reading():
     eafs, table = list_eaf()
@@ -198,7 +142,7 @@ class DataProvider:
     def generator(self, do_wavs = False, n = 1):
         i = 0
         while i < len(self):
-            yield get_rows(self.table, n = n, start = i, sr = self.sr, do_wavs = do_wavs)
+            yield get_sessions(self.table, n = n, start = i, sr = self.sr, do_wavs = do_wavs)
             i += n
     
     def nth_key(self, rows = None, n = 0):

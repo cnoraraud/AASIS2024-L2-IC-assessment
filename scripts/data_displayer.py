@@ -1,10 +1,10 @@
 import sys
 import math
 import traceback
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy_wrapper as npw
-import eaf_consumer as ec
-import matplotlib.pyplot as plt
+import eaf_reader as eafr
 import npz_reader as npzr
 import io_tools as iot
 import filtering as filt
@@ -13,7 +13,7 @@ def sanitize_labels(labels, tag=""):
     labels = npw.string_array(labels)
     sanitized_labels = np.empty(labels.shape, dtype = labels.dtype)
     for i, label in np.ndenumerate(labels):
-        sanitized_label, sanitized_number = ec.sanitize(label)
+        sanitized_label, sanitized_number = eafr.sanitize(label)
         if sanitized_number is None:
             sanitized_number = "[all]"
         tagspace = " "
@@ -79,7 +79,7 @@ def plot_line(feature, color, n=500, label="", smooth=False, x_axis=None):
         main_alpha = 0.25
     plt.plot(x_axis, feature, color = color, alpha = main_alpha, label=label)
 
-# TODO move display utils elsewhere?
+# TODO: move display utils elsewhere?
 def round_to_mult(num, mult = 10):
     anchor = 1
     if num == 0:

@@ -1,10 +1,10 @@
 import concurrent
+from scipy import stats as sstat
 import numpy as np
 import numpy_wrapper as npw
 import npz_reader as npzr
 import filtering as filt
 import analysis as ana
-from scipy import stats as sstat
 
 def apply_method_to_feature(data, method, properties = {}):
     return method(data, properties = properties)

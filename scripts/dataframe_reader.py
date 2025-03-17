@@ -1,10 +1,10 @@
+import math
+import collections
 import itertools
+import pandas as pd
+from matplotlib import pyplot as plt
 import numpy as np
 import numpy_wrapper as npw
-import collections
-import pandas as pd
-import math
-from matplotlib import pyplot as plt
 
 def get_speaker_groups(speakers, columns):
     if isinstance(columns, str):

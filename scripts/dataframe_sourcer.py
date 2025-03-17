@@ -1,5 +1,4 @@
 import numpy as np
-from datetime import date
 import pandas as pd
 import io_tools as iot
 import npz_reader as npzr

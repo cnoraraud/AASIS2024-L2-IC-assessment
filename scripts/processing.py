@@ -1,15 +1,15 @@
 import sys
 import math
 import traceback
-import eaf_consumer as ec
-import npz_reader as npzr
-import data_displayer as dd
-import data_reader as dr
 import numpy as np
-import wav_consumer as wc
-import csv_consumer as csvc
+import data_reader as dr
+import npz_reader as npzr
+import eaf_reader as eafr
+import wav_reader as wavr
+import csv_reader as csvr
 import npz_reader as npzr
 import npy_reader as npy
+import data_displayer as dd
 import io_tools as iot
 
 from collections import Counter
@@ -25,7 +25,7 @@ def get_sanitized_tiers(key, row, wavs):
     eaf = row["eaf"]
     tiers = list(eaf.tiers)
     for tier in tiers:
-        sanitized_tier, sanitized_number = ec.sanitize(tier)
+        sanitized_tier, sanitized_number = eafr.sanitize(tier)
         sanitized_tiers.append(sanitized_tier)
     return sanitized_tiers
 
@@ -34,15 +34,15 @@ def get_labelled_tier_labels(key, row, wavs):
     eaf = row["eaf"]
     tiers = list(eaf.tiers)
     for tier in tiers:
-        sanitized_tier, sanitized_number = ec.sanitize(tier)
-        if sanitized_tier in ec.LABELLED_TIERS:
+        sanitized_tier, sanitized_number = eafr.sanitize(tier)
+        if sanitized_tier in eafr.LABELLED_TIERS:
             for t0, t1, text in eaf.get_annotation_data_for_tier(tier):
                 label = None
                 if sanitized_tier == "text":
-                    label = ec.find_text_tokens(ec.sanitize_text(text), nontextual_tokens="contains")
+                    label = eafr.find_text_tokens(eafr.sanitize_text(text), nontextual_tokens="contains")
                 else:
                     label = text
-                label = ec.sanitize_label(label)
+                label = eafr.sanitize_label(label)
                 labels.append(sanitized_tier + " " + label)
     return labels
 
@@ -55,23 +55,30 @@ def summarize_all_data():
     print(res)
 
 def create_data(key, row, wavs):
-    ms = wc.find_wavs_ms(wavs)
-    extraction_data, extraction_labels = wc.wavs_to_ms(wavs)
+    ms = wavr.find_wavs_ms(wavs)
     eaf = row['eaf']
     name = row['eafpath'].name
-    annotation_data, annotation_labels = ec.process_eaf(eaf, ms, name=name)
-    #TODO: use nt.create_label()
-    D = np.concatenate([extraction_data, annotation_data], axis=1).T
-    L = np.concatenate([ec.sanitize_labels(extraction_labels, tag="(ext.)"), ec.sanitize_labels(annotation_labels, tag="(ann.)")])
+    annotation_data, annotation_labels = eafr.process_eaf(eaf, ms, name=name)
+    extraction_data, extraction_labels = wavr.wavs_to_ms(wavs)
+
+    if np.size(extraction_labels) > 0 and np.size(extraction_data) > 0:
+        D = np.concatenate([extraction_data, annotation_data], axis=1).T
+        L = np.concatenate([extraction_labels, annotation_labels])
+    else:
+        D = annotation_data.T
+        L = annotation_labels
     return D, L
 
-def data_pipeline():
+def get_data():
     print("Started creationg folders based on config")
     folders_exist = iot.create_data_folders()
     if folders_exist:
         print("All data folders exist...")
         print("Started fuzzy data sourcing")
         iot.source_annotated_data_fuzzy()
+    
+def data_pipeline():
+    get_data()
     print("Started creating DLs")
     create_all_data()
     print("Started adding joystick data")
@@ -130,11 +137,11 @@ def write_feature_to_data(name, D, L, method):
     return [f"{path} shape: {start_shape} => {end_shape}"]
 
 def write_joystick_to_data(name, D, L):
-    method = csvc.add_joysticks_to_data
+    method = csvr.add_joysticks_to_data
     return write_feature_to_data(name, D, L, method)
 
 def write_facial_feature_to_data(name, D, L):
-    method = csvc.add_facial_features_to_data
+    method = csvr.add_facial_features_to_data
     return write_feature_to_data(name, D, L, method)
 
 def display_all_data():

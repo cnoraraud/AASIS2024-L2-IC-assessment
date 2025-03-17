@@ -48,8 +48,10 @@ def aasis_pyfeat_csvs_path():
 def aasis_joystick_csvs_path():
     return aasis_data_path("joystick_csvs")
 
-def wavs_path():
-    return private_data_path("wavs")
+def wavs_path(sr = None):
+    if isinstance(sr, type(None)):
+        return private_data_path("wavs")
+    return private_data_path("wavs") / f"sr{sr}"
 
 def eafs_path():
     return private_data_path("eafs")
@@ -78,7 +80,6 @@ def special_data_path():
 def figs_path():
     return private_data_path("figs")
 
-# Pref use source_data_from_sessions
 def list_dir(path, extension="*"):
     names = []
     for file in path.glob(f'**/*.{extension}'):
@@ -100,6 +101,11 @@ def get_csv_names_facial_features(name):
     pyfeat_csv_list = pyfeat_csvs_path().glob(f'**/*.csv')
     session = get_related_session_for_file(name, use_defaults=False, pyfeat_csv_list=pyfeat_csv_list)
     return session["pyfeat_csvs"]
+
+def get_wav_paths(name):
+    wavs_list = wavs_path().glob(f'**/*.wav')
+    session = get_related_session_for_file(name, use_defaults=False, wav_list=wavs_list)
+    return session["wavs"]
 
 def get_csv_paths_joystick_discrete(eaf_name):
     annotators = ["il","jk"]
@@ -209,6 +215,10 @@ def check_configured(key_name, key_value):
         print(f"Key \'{key_name}\' not configured in! (\'{key_value}\')")
         raise NameError("")
 
+def create_wavs_sr_folder(sr):
+    if not wavs_path(sr).exists():
+        wavs_path(sr).mkdir(parents=True, exist_ok=False)
+
 def create_data_folders():
     new_folders = 0
     successful = False
@@ -279,7 +289,7 @@ def source_annotated_data_fuzzy():
 
                 tags = ["eafs", "wavs", "csvs", "pyfeat_csvs", "joystick_csvs"]
                 for tag in tags:
-                    tag_name = remove_plural(tags)
+                    tag_name = remove_plural(tag)
                     file_paths = session[tag]
                     file_dst_path = private_data_path(tag)
                     for file_path in file_paths:

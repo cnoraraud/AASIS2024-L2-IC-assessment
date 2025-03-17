@@ -29,7 +29,7 @@ def find_task(name):
         task = task_match[0]
     return task
 
-def find_cam(name):
+def find_cams(name):
     name = get_name(name)
     r_cam = r"cam(e(r(a?)?)?)?\d+"
     cams = []
@@ -38,13 +38,14 @@ def find_cam(name):
         cams.append(cam)
     return cams
 
-def find_mic(name):
+def find_mics(name):
     name = get_name(name)
     r_mic = r"mic(r(o(p(h(o(n(e?)?)?)?)?)?)?)?\d+"
     mics = []
     for mic_match in re.finditer(r_mic,name):
         mic = mic_match[0]
         mics.append(mic)
+    return mics
 
 def get_at_most_nth(slots, n=3):
     candidate = None
@@ -110,7 +111,7 @@ def find_tag(label):
         return EXTRACTION_TAG
     return 
 
-ALL_SOURCE = "[all]"
+ALL_SOURCE = npw.SPEAKERS
 def find_sources(label):
     slots = label.split(" ")
     if len(slots) == 0:

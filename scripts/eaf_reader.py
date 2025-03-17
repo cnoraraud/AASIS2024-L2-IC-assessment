@@ -1,9 +1,17 @@
 import re
 import numpy as np
 import numpy_wrapper as npw
+import naming_tools as nt
+import io_tools as iot
 
 TEXT_TAG = "<text>"
 LABELLED_TIERS = ["hand", "head", "body", "text"]
+
+def list_eafs():
+    eafs = []
+    for name in iot.list_dir(iot.eafs_path(), "eaf"):
+        eafs.append(name)
+    return eafs
 
 def sanitize(name):
     #removes hyphens and underscores
@@ -140,19 +148,6 @@ def sanitize_text(text, collapse_languages = True):
     
     return sanitized_text
 
-def sanitize_labels(labels, tag=""):
-    labels = npw.string_array(labels)
-    sanitized_labels = np.empty(labels.shape, dtype = labels.dtype)
-    for i, label in np.ndenumerate(labels):
-        sanitized_label, sanitized_number = sanitize(label)
-        if sanitized_number is None:
-            sanitized_number = "[all]"
-        tagspace = " "
-        if len(tag) > 0:
-            tagspace = " " + tag + " "
-        sanitized_labels[i] = f"{sanitized_number}{tagspace}{sanitized_label}"
-    return sanitized_labels
-
 def get_labels_for_tier(tier, tier_annotations):
     labels = dict()
     for t0, t1, string in tier_annotations:
@@ -194,6 +189,19 @@ def block_listed(key, name="unknown eaf"):
             print(f"Ignoring label \'{block}\' while processing \'{name}\' based on block-list.")
             return True
     return False
+
+def sanitize_labels(labels, tag=""):
+    labels = npw.string_array(labels)
+    sanitized_labels = np.empty(labels.shape, dtype = labels.dtype)
+    for i, label in np.ndenumerate(labels):
+        sanitized_label, sanitized_number = sanitize(label)
+        if sanitized_number is None:
+            sanitized_number = "[all]"
+        tagspace = " "
+        if len(tag) > 0:
+            tagspace = " " + tag + " "
+        sanitized_labels[i] = f"{sanitized_number}{tagspace}{sanitized_label}"
+    return sanitized_labels
 
 def process_eaf(eaf, width=None, name="unknown eaf"):    
     if isinstance(width, type(None)):
@@ -242,6 +250,10 @@ def process_eaf(eaf, width=None, name="unknown eaf"):
     labels = []
     for i, label in enumerate(annotation_series):
         data[:, i] = annotation_series[label]
-        labels.append(label)
+        feature, source = sanitize(label)
+        if isinstance(source, type(None)):
+            source = nt.ALL_SOURCE
+        labels.append(nt.create_label(source, feature, nt.ANNOTATION_TAG))
     
+    labels = npw.string_array(labels)
     return data, labels

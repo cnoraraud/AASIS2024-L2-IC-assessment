@@ -1,13 +1,14 @@
 import sys
 import pathlib as p
-import numpy as np
 import pandas as pd
 from scipy import interpolate
+import numpy as np
 import numpy_wrapper as npw
 import io_tools as iot
 import naming_tools as nt
 
 # TODO: similar function in filtering.py... combine somehow?
+# The difference is that the x here is explicitly given
 def fit_to_data(x,y,t_max=None, kind="linear"):
     if t_max is None:
         t_max = x.max()
@@ -52,7 +53,8 @@ def get_joystick_data(csv_name, t_max=None):
     df.columns = ["time", "x", "y", "f"]
     df["ms"] = np.round(df["time"]*1000).astype(int)
     valid_range = df[df["f"] == 1]["ms"].tolist()
-    df = df[(df["ms"] > valid_range[0]) & (df["ms"] < valid_range[-1])]
+    if len(valid_range) >= 2:
+        df = df[(df["ms"] > valid_range[0]) & (df["ms"] < valid_range[-1])]
 
     good_cols = ["x", "y"]
     df_ms = df["ms"]
