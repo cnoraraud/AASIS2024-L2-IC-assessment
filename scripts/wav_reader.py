@@ -51,23 +51,24 @@ def data_to_mfcc(data, window_n, hop_n, rate, first_cep = 1, num_ceps = 12):
         i += hop_n
     return np.array(mfccs)
 
-def find_wavs_ms(wavs):
-    ms_proposals = [-1]
+def find_wavs_t_max(wavs):
+    t_max_proposals = [-1]
     for wav in wavs:
         data = wav["data"]
         sr = wav["sr"]
-        R = int(sr)
-        H = round(R / 1000)
-        W = round(data.shape[0] / H)
-        ms_proposals.append(W)
-    ms_proposals = set(ms_proposals)
-    if len(ms_proposals) != 1:
-        print(f"Invalid number of ms proposals: {len(ms_proposals)}")
-    ms = max(list(ms_proposals))
-    if ms <= 0: ms = None
-    return ms
+        t_max = round(data.shape[0] / round(int(sr) / 1000))
+        t_max_proposals.append(t_max)
+    t_max_proposals = set(t_max_proposals)
+    if len(t_max_proposals) != 2:
+        name = "unknown_name"
+        if len(wavs) > 0:
+            name = nt.file_swap(wavs[0]["wav_path"], all=False)
+        print(f"Invalid number of t_max proposals: {len(t_max_proposals)}\n\t{[t_max_proposals]}\n\t{name}")
+    t_max = max(list(t_max_proposals))
+    if t_max <= 0: t_max = None
+    return t_max
 
-def data_to_ms(data, ms, samples_per_ms, aggregate='mean'):
+def data_aggregate(data, ms, samples_per_ms, aggregate='mean'):
     data_stack = data.reshape(ms, samples_per_ms)
     data_ms = None
     if aggregate == 'mean':
@@ -76,17 +77,46 @@ def data_to_ms(data, ms, samples_per_ms, aggregate='mean'):
         data_ms = np.sum(np.abs(data_stack), axis=1) / samples_per_ms
     return data_ms
 
-def wavs_to_ms(wavs, window_n = 1000, first_cep = 1, num_ceps = 12, left_mics = ["mic1"], right_mics = ["mic2"], gen_mics = ["mic3", "mic4", "mic5"]):
+def data_to_t_max(data, t_max, fit_policy):
+    t_cur = data.shape[0]
+    if t_cur == t_max:
+        return data
+    new_shape = list(data.shape)
+    new_shape[0] = t_max
+    new_shape = tuple(new_shape)
+
+    justify = "left"
+    if fit_policy == "close_enough":
+        justify = "centre"
+    
+    dif = t_max - t_cur
+    l_side = 0
+    if justify == "left":
+        l_side = 0
+    if justify == "right":
+        l_side = dif
+    if justify == "centre":
+        l_side = dif // 2
+
+    data_new = np.full(new_shape, np.nan)
+    if fit_policy == "close_enough":
+        if dif <= 2000 or dif < 0:
+            if data.ndim == 2:
+                for i in range(data.shape[1]):
+                    data_new[:,i] = filt.fit_to_size(data[:,i], {"t": t_max})
+            else:
+                data_new = filt.fit_to_size(data, {"t": t_max})
+        else:
+            if data.ndim == 1:
+                data_new[l_side:l_side+t_cur] = data
+            if data.ndim == 2:
+                data_new[l_side:l_side+t_cur,:] = data
+
+    return data_new
+
+def wavs_to_data_matrix(wavs, t_max, window_n = 1000, first_cep = 1, num_ceps = 12, left_mics = ["mic1"], right_mics = ["mic2"], gen_mics = ["mic3", "mic4", "mic5"], fit_policy="close_enough"):
     datas = []
     labels = []
-
-    hop = -1
-    width = -1
-    for wav in wavs:
-        data = wav["data"]
-        sr = wav["sr"]
-        hop = max(hop, round(sr / window_n))
-        width = max(width, round(data.shape[0] / hop))
         
     # SC, MC, Outcome
     #  1,  1, - wav belongs to single speaker
@@ -99,6 +129,8 @@ def wavs_to_ms(wavs, window_n = 1000, first_cep = 1, num_ceps = 12, left_mics = 
         sr = wav["sr"]
         speakers = wav["speakers"]
         mics = wav["mics"]
+        hop = round(sr / window_n)
+        width = round(data.shape[0] / hop)
         SC = len(speakers)
         MC = len(mics)
 
@@ -122,9 +154,15 @@ def wavs_to_ms(wavs, window_n = 1000, first_cep = 1, num_ceps = 12, left_mics = 
 
         data = filt.norm(data)
         data = stereo_to_mono(data)
+
         ceps = data_to_mfcc(data, window_n, hop, sr, first_cep = first_cep, num_ceps = num_ceps)
-        energy = data_to_ms(data, width, hop, aggregate='energy')
+        energy = data_aggregate(data, width, hop, aggregate='energy')
         vad = energy_to_vad(energy)
+
+        # !
+        ceps = data_to_t_max(ceps, t_max, fit_policy=fit_policy)
+        energy = data_to_t_max(energy, t_max, fit_policy=fit_policy)
+        vad = data_to_t_max(vad, t_max, fit_policy=fit_policy)
 
         for i in range(num_ceps):
             datas.append(ceps[:, i])
@@ -203,7 +241,8 @@ def read_wavs(wav_paths, sr):
             wav = {"data": data,
                     "sr": new_sr,
                     "speakers": speakers,
-                    "mics": mics}
+                    "mics": mics,
+                    "wav_path": wav_path}
             wavs.append(wav)
         except Exception as e:
             print(f"Could not read {wav_path} due to {e}")

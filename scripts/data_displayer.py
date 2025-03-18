@@ -79,7 +79,6 @@ def plot_line(feature, color, n=500, label="", smooth=False, x_axis=None):
         main_alpha = 0.25
     plt.plot(x_axis, feature, color = color, alpha = main_alpha, label=label)
 
-# TODO: move display utils elsewhere?
 def round_to_mult(num, mult = 10):
     anchor = 1
     if num == 0:

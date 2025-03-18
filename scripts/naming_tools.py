@@ -5,7 +5,9 @@ import numpy_wrapper as npw
 def get_name(path):
     return p.Path(path).name
 
-def file_swap(path, to=None):
+def file_swap(path, to=None, all=True):
+    if not all:
+        path = get_name(path)
     if isinstance(to, type(None)):
         return p.Path(path).stem
     else:

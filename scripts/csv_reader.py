@@ -1,18 +1,16 @@
 import sys
 import pathlib as p
 import pandas as pd
-from scipy import interpolate
+from scipy.interpolate import interp1d
 import numpy as np
 import numpy_wrapper as npw
 import io_tools as iot
 import naming_tools as nt
 
-# TODO: similar function in filtering.py... combine somehow?
-# The difference is that the x here is explicitly given
-def fit_to_data(x,y,t_max=None, kind="linear"):
+def fit_to_data(x, y, t_max=None, kind="linear"):
     if t_max is None:
         t_max = x.max()
-    f = interpolate.interp1d(x, y, kind=kind, bounds_error=False, fill_value="extrapolate")
+    f = interp1d(x, y, kind=kind, bounds_error=False, fill_value="extrapolate")
     new_x = np.arange(t_max)
     new_y = f(new_x)
     return new_x, new_y

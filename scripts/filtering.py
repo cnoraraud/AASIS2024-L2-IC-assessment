@@ -18,14 +18,16 @@ def to_01(data, properties={}):
     if "axis" in properties:
         axis = properties["axis"]
     pos_data = data - np.nanmin(data, axis=axis, keepdims=True)
-    return pos_data / np.nanmax(pos_data, axis=axis, keepdims=True)
+    data_s = np.nanmax(pos_data, axis=axis, keepdims=True)
+    return pos_data / data_s
 
 def norm(data, properties={}):
     axis = -1
     if "axis" in properties:
         axis = properties["axis"]
     data_c = data - np.nanmean(data, axis=axis, keepdims=True)
-    return data_c / np.nanmax(np.abs(data_c), axis=axis, keepdims=True)
+    data_s = np.nanmax(np.abs(data_c), axis=axis, keepdims=True)
+    return data_c / data_s
 
 def flatten(data, properties = {}):
     threshold = np.finfo(np.float64).eps
@@ -75,7 +77,7 @@ def interpolate_nans(data, properties={}):
     new_data[nans] = f(x[nans])
     return new_data
 
-def interpolate_to_size(data, properties={}):
+def fit_to_size(data, properties={}):
     t = properties["t"]
     x = np.arange(data.shape[0]) / data.shape[0]
     x_output = np.arange(t)/t

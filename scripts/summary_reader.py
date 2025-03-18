@@ -15,6 +15,35 @@ def load_summaries(names):
         summaries[npy_name.name] = {"npy": npy_name.name, "summary":summary}
     return summaries
 
+def count_label_values(summary):
+    individual_values = 0
+    individual_values_valid = 0
+    relational_values = 0
+    relational_values_valid = 0
+    valid_structure = True
+    try:
+        label_summaries = summary["label_summaries"]
+        for label_key in label_summaries:
+            label_summary = label_summaries[label_key]
+            label_summary_self = label_summary["self"]
+            label_summary_others = label_summary["others"]
+            individual_values += 1
+            if label_summary_self["valid"]:
+                individual_values_valid += 1
+            for other_label_key in label_summary_others:
+                label_summary_other = label_summary_others[other_label_key]
+                relational_values += 1
+                if label_summary_other["valid"]:
+                    relational_values_valid += 1
+    except:
+        name = "unknown_summary"
+        if "name" in summary:
+            name = summary["name"]
+        print(f"Summary for {name} found to have invalid structure")
+        valid_structure = False
+        
+    return individual_values_valid, individual_values, relational_values_valid, relational_values, valid_structure
+
 def get(obj, path, supress_escape=False, search_in_children=False, fallback=None):
     if not supress_escape and "/" in path:
         path = path.split("/")
@@ -46,7 +75,7 @@ def get(obj, path, supress_escape=False, search_in_children=False, fallback=None
         elif keyword in current_obj:
             current_obj = current_obj[keyword]
         elif search_in_children:
-            #TODO: would be nice to search necessary stuff in children if can't find in yourself, looser pathing...
+            #TODO (low prio): Would be nice to search necessary stuff in children if can't find in yourself, looser pathing...
             raise NotImplementedError("search_in_children is not implemented")
         else:
             return fallback

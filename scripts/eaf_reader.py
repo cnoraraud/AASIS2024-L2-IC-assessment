@@ -13,21 +13,26 @@ def list_eafs():
         eafs.append(name)
     return eafs
 
+def eaf_info(eaf_path):
+    metadata = iot.read_metadata_from_path(eaf_path)
+    return metadata["size"]
+
 def sanitize(name):
-    #removes hyphens and underscores
-    #seperates speaker number
-    #replaces common plurals
     sanitized_name = name
     sanitized_number = None
     
+    #seperates speaker number
     namespace = name
     if any(x.isdigit() for x in name) and "_" in name:
         numspace = name.split("_")[0]
         numspace = numspace.replace("sspeaker","speaker")
         namespace = "_".join(name.split("_")[1:])
         sanitized_number = numspace
+    
+    #removes hyphens and underscores
     sanitized_name = "".join(filter(lambda x: x.isalpha() or x.isdigit() or x == ":" or x == "<" or x == ">", namespace)).lower()
     
+    #replaces common plurals
     sanitized_name = sanitized_name.replace("pauses","pause")
     sanitized_name = sanitized_name.replace("overlaps","overlap")
     sanitized_name = sanitized_name.replace("hands","hand")
@@ -203,7 +208,7 @@ def sanitize_labels(labels, tag=""):
         sanitized_labels[i] = f"{sanitized_number}{tagspace}{sanitized_label}"
     return sanitized_labels
 
-def process_eaf(eaf, width=None, name="unknown eaf"):    
+def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):    
     if isinstance(width, type(None)):
         width = eaf.get_full_time_interval()[1]
 

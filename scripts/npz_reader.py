@@ -1,7 +1,5 @@
-import os
 import sys
 import re
-import time
 import math
 import copy
 import numpy as np
@@ -10,6 +8,8 @@ import naming_tools as nt
 import numpy_wrapper as npw
 import analysis as ana
 import filtering as filt
+import data_logger as dl
+import eaf_reader as eafr
 
 def nothas(labels, sub):
     return np.char.find(np.array(labels), sub) == -1
@@ -114,11 +114,16 @@ def anonymize_speakers(labels):
 def double_speaker_filter(labels):
     return ~(has(labels, npw.SPEAKER1) & has(labels, npw.SPEAKER2))
 
+def DL_info(D, L):
+    return f"{D.shape}"
+
 def write_DL(name, D, L):
-    npzs_path = iot.npzs_path()
-    path = npzs_path / name
-    np.savez(path, D=D, L=L)
-    return path
+    eaf_path = iot.eafs_path() / nt.file_swap(name, "eaf", all=False)
+    npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
+    np.savez(npz_path, D=D, L=L)
+    input_info = eafr.eaf_info(eaf_path)
+    output_info = DL_info(D, L)
+    return [dl.write_to_manifest_new_file("data_matrix", eaf_path, npz_path, input_info=input_info, output_info=output_info)]
 
 def npz_list():
     npzs = []
@@ -132,7 +137,7 @@ def print_npz():
 
 def read_DL_metadata_from_name(name):
     name = nt.file_swap(name, "npz")
-    return read_DL_metadata(iot.npzs_path() / name)
+    return iot.read_metadata_from_path(iot.npzs_path() / name)
         
 def read_DL_from_name(name):
     name = nt.file_swap(name, "npz")
@@ -147,13 +152,6 @@ def read_sanitized_DL(path):
 def read_sanitized_DL_from_name(name):
     name = nt.file_swap(name, "npz")
     return read_sanitized_DL(iot.npzs_path() / name)
-
-def read_DL_metadata(path):
-    name = path.stem
-    mtime = os.path.getmtime(f"{path}")
-    cmtime = time.ctime(mtime)
-    time_string = f"{cmtime}"
-    return name, time_string
 
 def read_DL(path):
     npz = np.load(path)
@@ -400,7 +398,7 @@ def combined_segment_matrix_with_interpolation(segments):
         target_indecies = np.isin(all_labels, segment["labels"])
 
         my_matrix = np.full(shape, np.nan)
-        interpolated_data = ana.apply_method_to_all_features(segment["data"], filt.interpolate_to_size, {"t": max_segment_length, "destructive": True})
+        interpolated_data = ana.apply_method_to_all_features(segment["data"], filt.fit_to_size, {"t": max_segment_length, "destructive": True})
         
         my_matrix[target_indecies, :] = interpolated_data[source_indecies, :]
         total_matrix[:,:,i] = my_matrix

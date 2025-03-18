@@ -1,5 +1,5 @@
-version: "0.1.4"
-date: "2025/03/11"
+version: "0.1.5"
+date: "2025/03/18"
 paths:
   main_data:
     .: "<root dir>"
@@ -21,3 +21,4 @@ paths:
     joystick_csvs: "<sub dir>"
     figs: "<sub dir>"
     special_data: "<sub dir>"
+    manifests: "<sub dir>"

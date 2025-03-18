@@ -9,6 +9,8 @@ import numpy as np
 from pympi import Elan as elan
 import elan_tools as elant
 import naming_tools as nt
+import time
+import data_logger as dl
 
 def get_config_private():
     with open('../config/privateconfig.yml', 'r') as file:
@@ -80,11 +82,32 @@ def special_data_path():
 def figs_path():
     return private_data_path("figs")
 
+def manifests_path():
+    return private_data_path("manifests")
+
 def list_dir(path, extension="*"):
     names = []
     for file in path.glob(f'**/*.{extension}'):
         names.append(file.name)
     return names
+
+def read_metadata_from_path(path):
+    name = "unknown_name"
+    cmtime = "unknown_modification_time"
+    size = "unknown_size"
+    type = "unknown_type"
+    exists = os.path.exists(path)
+    if exists:
+        name = nt.get_name(path)
+        mtime = os.path.getmtime(f"{path}")
+        cmtime = str(time.ctime(mtime))
+        size = os.path.getsize(path)
+        if os.path.isdir(path):
+            type = "dir"
+        elif os.path.isfile(path):
+            type = "file"
+
+    return {"name": name, "mtime": cmtime, "size": size, "type": type}
 
 def annotated_list():
     config = get_config_private()
@@ -138,7 +161,7 @@ def source_annotated_data_discrete():
     eafs_dst_path = eafs_path()
     wavs_dst_path = wavs_path()
     csvs_dst_path = csvs_path()
-    
+
     with open(personal_path / "copy_manifest.txt", "a") as manifest:
         manifest.write(f"\nSTARTING discrete copy {datetime.now()}\n")
         version = config["version"]
@@ -267,49 +290,28 @@ def remove_plural(word):
     return word
 
 def source_annotated_data_fuzzy():
-    config = get_config_private()
-    aasis_path = p.Path(config["paths"]["main_data"]["."])
-    personal_path = p.Path(config["paths"]["personal_data"]["."])
+    manifest = dl.ManifestSession("copy")
+    manifest.start()
+
     sessions = get_aasis_sessions()
+    for session_key in sessions:
+        try:
+            session = sessions[session_key]
+            manifest.session_start(session["name"])
 
-    with open(personal_path / "copy_manifest.txt", "a") as manifest:
-        version = config["version"]
-        date = config["date"]
-        good = 0
-        new = 0
-        bad = 0
-        manifest.write(f"\nSTARTING fuzzy copy {datetime.now()}\n")
-        manifest.write(f"\tCONFIG: version {version} from {date}\n")
-        manifest.write(f"\tFROM: {aasis_path} TO: {personal_path}\n")
-        for session_key in sessions:
-            try:
-                session = sessions[session_key]
-                name = session["name"]
-                updated = 0
-
-                tags = ["eafs", "wavs", "csvs", "pyfeat_csvs", "joystick_csvs"]
-                for tag in tags:
-                    tag_name = remove_plural(tag)
-                    file_paths = session[tag]
-                    file_dst_path = private_data_path(tag)
-                    for file_path in file_paths:
-                        if copy_missing(file_path, file_dst_path / file_path.name):
-                            manifest.write(f"\t{name}: {tag_name} succeeded ({file_path.name})\n")
-                            updated += 1
-                
-                if updated == 0:
-                    manifest.write(f"\t{name}: already existed\n")
-                else:
-                    new += updated
-                good += 1
-            except Exception as e:
-                print(traceback.format_exc())
-                manifest.write(f"\t{name}: failed\n\t\terror: {e}\n")
-                bad += 1
-        manifest.write(f"\tSTATS: good {good} bad {bad} new {new}\n")
-        manifest.write(f"FINISHING copy {datetime.now()}\n")
-
-    return None
+            tags = ["eafs", "wavs", "csvs", "pyfeat_csvs", "joystick_csvs"]
+            for tag in tags:
+                tag_name = remove_plural(tag)
+                file_paths = session[tag]
+                file_dst_path = private_data_path(tag)
+                for file_path in file_paths:
+                    if copy_missing(file_path, file_dst_path / file_path.name):
+                        manifest.new_file(tag_name, file_path.name)
+            
+            manifest.session_end()
+        except Exception as e:
+            print(traceback.format_exc())
+            manifest.error(e)
 
 def any_in(search_string, sub_strings):
     for sub_string in sub_strings:
@@ -350,23 +352,24 @@ def get_newest_file_paths(file_paths):
             output_file_paths.append(path_list_sorted[-1])
     return output_file_paths
 
-# TODO: generics somehow?
+# TODO (low prio): Generics somehow...
 def get_related_session_for_file(file, use_defaults=True, eaf_list=None, wav_list=None, csv_list=None, mp4_list=None, pyfeat_csv_list=None, joystick_csv_list=None):
     # Defaults
     file_path = p.Path(file)
     file_name = file_path.name
-    if use_defaults and isinstance(eaf_list, type(None)):
-        eaf_list = sorted(eafs_path().glob(f'**/*.eaf'))
-    if use_defaults and isinstance(wav_list, type(None)):
-        wav_list = sorted(wavs_path().glob(f'**/*.wav'))
-    if use_defaults and isinstance(csv_list, type(None)):
-        csv_list = sorted(csvs_path().glob(f'**/*.csv'))
-    if use_defaults and isinstance(mp4_list, type(None)):
-        mp4_list = sorted(mp4s_path().glob(f'**/*.mp4'))
-    if use_defaults and isinstance(pyfeat_csv_list, type(None)):
-        pyfeat_csv_list = sorted(pyfeat_csvs_path().glob(f'**/*.csv'))
-    if use_defaults and isinstance(joystick_csv_list, type(None)):
-        joystick_csv_list = sorted(joystick_csvs_path().glob(f'**/*.csv'))
+    if use_defaults:
+        if isinstance(eaf_list, type(None)):
+            eaf_list = sorted(eafs_path().glob(f'**/*.eaf'))
+        if isinstance(wav_list, type(None)):
+            wav_list = sorted(wavs_path().glob(f'**/*.wav'))
+        if isinstance(csv_list, type(None)):
+            csv_list = sorted(csvs_path().glob(f'**/*.csv'))
+        if isinstance(mp4_list, type(None)):
+            mp4_list = sorted(mp4s_path().glob(f'**/*.mp4'))
+        if isinstance(pyfeat_csv_list, type(None)):
+            pyfeat_csv_list = sorted(pyfeat_csvs_path().glob(f'**/*.csv'))
+        if isinstance(joystick_csv_list, type(None)):
+            joystick_csv_list = sorted(joystick_csvs_path().glob(f'**/*.csv'))
 
     # Session
     task = nt.find_task(file_name)
@@ -402,7 +405,7 @@ def get_related_session_for_file(file, use_defaults=True, eaf_list=None, wav_lis
             "eafs": eafs,
             "wavs": wavs,
             "csvs": csvs,
-            "mp4s":mp4s,
+            "mp4s": mp4s,
             "pyfeat_csvs": pyfeat_csvs,
             "joystick_csvs": joystick_csvs}
 
