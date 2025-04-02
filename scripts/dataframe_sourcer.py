@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import io_tools as iot
+import naming_tools as nt
 import npz_reader as npzr
 import npy_reader as npyr
 
@@ -39,8 +40,21 @@ def process_names(names):
     return pd.DataFrame({"datetime": dates, "speaker_1": speaker1s, "speaker_2": speaker2s, "task": tasks, "annotator": annotators})
 def get_sample_dataframe():
     names = pd.DataFrame()
-    names["npz"] = npzr.npz_list()
-    names["npy"] = npyr.npy_list()
+    npzs = []
+    npys = []
+    npy_list = npyr.npy_list()
+    for npz_name in npzr.npz_list():
+        npzs.append(npz_name)
+        found = False
+        for npy_name in npy_list:
+            if nt.file_swap(npz_name, all=False) == nt.file_swap(npy_name, all=False):
+                npys.append(npy_name)
+                found = True
+                break
+        if not found:
+            npys.append("-")
+    names["npz"] = npzs
+    names["npy"] = npys
     df = process_names(names["npz"])
     return names.join(df)
 

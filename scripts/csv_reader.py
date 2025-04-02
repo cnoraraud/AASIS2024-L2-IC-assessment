@@ -6,6 +6,19 @@ import numpy as np
 import numpy_wrapper as npw
 import io_tools as iot
 import naming_tools as nt
+import data_logger as dl
+
+def list_pyfeats():
+    csvs = []
+    for name in iot.list_dir(iot.pyfeat_csvs_path(), "csv"):
+        csvs.append(name)
+    return csvs
+
+def list_joysticks():
+    csvs = []
+    for name in iot.list_dir(iot.joystick_csvs_path(), "csv"):
+        csvs.append(name)
+    return csvs
 
 def fit_to_data(x, y, t_max=None, kind="linear"):
     if t_max is None:
@@ -115,7 +128,6 @@ def get_pyfeat_data(csv_name, t_max=None):
 
     return pd_to_DL(df_ms, df_good, t_max)
             
-
 def add_facial_features_to_data(data_name, D, L):
     Ds = [D]
     Ls = [L]
@@ -124,12 +136,18 @@ def add_facial_features_to_data(data_name, D, L):
         ff_D, ff_L = get_pyfeat_data(csv_path, t_max=t_max)
 
         name = nt.file_swap(nt.get_name(csv_path))
-        source = nt.compact_sources(nt.speakers_to_sources(nt.find_speakers(name)))
+        canidates = nt.find_best_candidate(nt.find_speakers(name))
+        if len(canidates) > 1:
+            dl.log(f"Mysterious file name ({name}), multiple speakers share a face?")
+            continue
+
+        source = nt.compact_sources(nt.speakers_to_sources(canidates))
         tag = nt.ANNOTATION_TAG
         
         new_l = []
         for feature in ff_L:
-            new_l.append(nt.create_label(source, tag, f"{feature}"))
+            feature_clean = feature.lower()
+            new_l.append(nt.create_label(source, tag, f"ff:{feature_clean}"))
         Ds.append(ff_D)
         Ls.append(npw.string_array(new_l))
 
@@ -146,7 +164,8 @@ def add_joysticks_to_data(data_name, D, L):
         js_D, js_L = get_joystick_data(csv_path, t_max=t_max)
 
         name = nt.file_swap(nt.get_name(csv_path))
-        source = nt.compact_sources(nt.speakers_to_sources(nt.find_speakers(name)))
+        canidates = nt.find_best_candidate(nt.find_speakers(name))
+        source = nt.compact_sources(nt.speakers_to_sources(canidates))
         tag = nt.ANNOTATION_TAG
         annotator = nt.find_annotator(name)
         version = nt.find_version(name)
@@ -154,7 +173,8 @@ def add_joysticks_to_data(data_name, D, L):
         
         new_l = []
         for feature in js_L:
-            new_l.append(nt.create_label(source, tag, f"{feature}:{annotator}", extra))
+            feature_clean = feature.lower()
+            new_l.append(nt.create_label(source, tag, f"js:{feature_clean}:{annotator}", extra))
         Ds.append(js_D)
         Ls.append(npw.string_array(new_l))
 

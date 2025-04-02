@@ -15,14 +15,17 @@ def list_wavs():
         wavs.append(name)
     return wavs
 
-def stereo_to_mono(data):
+def merge_to_mono(data):
     # For some audios, one of the channels might be usable for a noise profile
     # At the moment just adding the two channels together
     return np.sum(data, axis=1)
 
+def split_to_mono(data):
+    return [data[:,0], data[:,1]]
+
 def print_wav(wav):
     sr, data, speakers, mics = wav
-    data = stereo_to_mono(data)
+    data = merge_to_mono(data)
     data = sig.wiener(data)
     plt.plot(data)
     plt.title(f"sr: {sr} sec: {data.shape[0]/sr} speakers: {speakers} mics: {mics}")
@@ -133,11 +136,14 @@ def wavs_to_data_matrix(wavs, t_max, window_n = 1000, first_cep = 1, num_ceps = 
         width = round(data.shape[0] / hop)
         SC = len(speakers)
         MC = len(mics)
-
+        skip_ceps = False
         if SC == 1 and MC == 1:
             speaker = speakers[0]
+            c_datas = [merge_to_mono(data)]
+            c_speakers = [speaker]
         elif SC == 2 and MC == 2:
-            speaker = nt.ALL_SOURCE
+            c_datas = split_to_mono(data)
+            c_speakers = [speakers[0], speakers[1]]
         elif SC == 2 and MC == 1:
             mic = mics[0]
             if mic in left_mics:
@@ -148,30 +154,35 @@ def wavs_to_data_matrix(wavs, t_max, window_n = 1000, first_cep = 1, num_ceps = 
                 speaker = nt.ALL_SOURCE
             else:
                 raise ValueError(f"Unknown mic {mic}. Don't know how to assign it to sources ({SC}).")
+            c_datas = [merge_to_mono(data)]
+            c_speakers = [speaker]
+            skip_ceps = True
         else:
             raise ValueError(f"Strange speaker ({SC}) and mic counts ({MC}). {speakers} {mics}")
+        
+        for c_data, speaker in zip(c_datas, c_speakers):
+            c_data = filt.norm(c_data)
 
+            energy = data_aggregate(c_data, width, hop, aggregate='energy')
+            vad = energy_to_vad(energy)
+            if not skip_ceps:
+                ceps = data_to_mfcc(c_data, window_n, hop, sr, first_cep = first_cep, num_ceps = num_ceps)
 
-        data = filt.norm(data)
-        data = stereo_to_mono(data)
+            # !
+            energy = data_to_t_max(energy, t_max, fit_policy=fit_policy)
+            vad = data_to_t_max(vad, t_max, fit_policy=fit_policy)
+            if not skip_ceps:
+                ceps = data_to_t_max(ceps, t_max, fit_policy=fit_policy)
 
-        ceps = data_to_mfcc(data, window_n, hop, sr, first_cep = first_cep, num_ceps = num_ceps)
-        energy = data_aggregate(data, width, hop, aggregate='energy')
-        vad = energy_to_vad(energy)
-
-        # !
-        ceps = data_to_t_max(ceps, t_max, fit_policy=fit_policy)
-        energy = data_to_t_max(energy, t_max, fit_policy=fit_policy)
-        vad = data_to_t_max(vad, t_max, fit_policy=fit_policy)
-
-        for i in range(num_ceps):
-            datas.append(ceps[:, i])
-            cep_name = f"cep:{i + first_cep}"
-            labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, cep_name))
-        datas.append(energy)
-        labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "energy"))
-        datas.append(vad)
-        labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "vad"))
+            datas.append(energy)
+            labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "energy"))
+            datas.append(vad)
+            labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "vad"))
+            if not skip_ceps:
+                for i in range(num_ceps):
+                    datas.append(ceps[:, i])
+                    cep_name = f"cep:{i + first_cep}"
+                    labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, cep_name))
 
     return np.array(datas).T, npw.string_array(labels)
 

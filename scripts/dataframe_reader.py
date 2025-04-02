@@ -1,6 +1,6 @@
 import math
-import collections
 import itertools
+from collections import Counter
 import pandas as pd
 from matplotlib import pyplot as plt
 import numpy as np
@@ -80,7 +80,7 @@ def get_grouping_columns():
     return grouping_columns
 
 def language_counts(speakers, key="Second Languages"):
-    lc = collections.Counter()
+    lc = Counter()
     for ls in list(speakers[key]):
         if not isinstance(ls,str):
             continue

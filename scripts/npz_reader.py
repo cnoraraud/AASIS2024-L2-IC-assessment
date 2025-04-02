@@ -2,6 +2,8 @@ import sys
 import re
 import math
 import copy
+from collections import Counter
+from collections import defaultdict
 import numpy as np
 import io_tools as iot
 import naming_tools as nt
@@ -10,6 +12,10 @@ import analysis as ana
 import filtering as filt
 import data_logger as dl
 import eaf_reader as eafr
+
+
+def full(labels, value=True):
+    return np.full(labels.shape, value)
 
 def nothas(labels, sub):
     return np.char.find(np.array(labels), sub) == -1
@@ -86,6 +92,9 @@ def find_speaker_numbers(name):
         speakers.append(speaker)
     return speakers
 
+def mode(candidates):
+    return Counter(candidates).most_common(1)[0][0]
+
 def anonymize_speakers(labels):
     source_map = dict()
     new_labels = []
@@ -102,7 +111,7 @@ def anonymize_speakers(labels):
                 print("Possible presumptions broken:\n")
                 print("\t- Only 2 speakers present.")
                 print("\t- One speaker always even numbered, the other always odd")
-        new_source = "-".join(anon_sources)
+        new_source = nt.compact_sources(anon_sources, plural_nicks=True)
         tag = nt.find_tag(label)
         feature = nt.find_feature(label)
         extra = nt.find_extra(label)
@@ -110,6 +119,49 @@ def anonymize_speakers(labels):
         new_labels.append(new_label)
     return npw.string_array(new_labels)
 
+def strip_label_slots(labels, slots=[0, 1]):
+    if not isinstance(slots, list):
+        slots = [slots]
+    new_labels = []
+    for l in labels:
+        l_slots = l.split(" ")
+        new_slots = []
+        for i, l_slot in enumerate(l_slots):
+            if i not in slots: new_slots.append(l_slot)
+        new_label = "-".join(new_slots)
+        new_labels.append(new_label)
+    return npw.string_array(new_labels)
+
+def extract_speakers_DLs(data, labels):
+    labels = anonymize_speakers(labels)
+    S1_filter = has(labels, npw.SPEAKER1)
+    S2_filter = has(labels, npw.SPEAKER2)
+    D1, L1 = do_label_select(data, labels, S1_filter)
+    D2, L2 = do_label_select(data, labels, S2_filter)
+    L1 = strip_label_slots(L1)
+    L2 = strip_label_slots(L2)
+    return (D1, L1), (D2, L2)
+
+def fit_DLs(DLs):
+    L_common = set()
+    for DL in DLs:
+        D, L = DL
+        L_common = L_common | set(L.tolist())
+    L_common = npw.string_array(sorted(list(L_common)))
+    Ds = []
+    for DL in DLs:
+        D, L = DL
+        L_incommon = np.isin(L_common, L)
+        D_incommon_shape = (L_common.shape[0], D.shape[1])
+        D_incommon = np.full(D_incommon_shape, np.nan)
+        D_incommon[L_incommon, :] = D
+        Ds.append(D_incommon)
+    return Ds, L_common
+
+def dual_speaker_DLs(data, labels):
+    DL1, DL2 = extract_speakers_DLs(data, labels)
+    Ds, L_common = fit_DLs([DL1, DL2])
+    return Ds[0], Ds[1], L_common
 
 def double_speaker_filter(labels):
     return ~(has(labels, npw.SPEAKER1) & has(labels, npw.SPEAKER2))
@@ -117,13 +169,16 @@ def double_speaker_filter(labels):
 def DL_info(D, L):
     return f"{D.shape}"
 
-def write_DL(name, D, L):
+def write_DL(name, D, L, write_to_manifest=True):
     eaf_path = iot.eafs_path() / nt.file_swap(name, "eaf", all=False)
     npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
     np.savez(npz_path, D=D, L=L)
     input_info = eafr.eaf_info(eaf_path)
     output_info = DL_info(D, L)
-    return [dl.write_to_manifest_new_file("data_matrix", eaf_path, npz_path, input_info=input_info, output_info=output_info)]
+    if write_to_manifest:
+        return [dl.write_to_manifest_new_file("data_matrix", eaf_path, npz_path, input_info=input_info, output_info=output_info)]
+    else:
+        return npz_path
 
 def npz_list():
     npzs = []
@@ -134,6 +189,38 @@ def npz_list():
 def print_npz():
     for name in npz_list():
         print(name)
+
+def print_annotation_info():
+    npzs = npz_list()
+    sources_to_ms = defaultdict(list)
+    for npz in npzs:
+        if "task5" not in npz:
+            continue
+        name, D, L = read_sanitized_DL_from_name(npz)
+        ms = D.shape[1]
+        canidates = nt.find_best_candidate(nt.find_speakers(name))
+        source = nt.compact_sources(nt.speakers_to_sources(canidates))
+        sources_to_ms[source].append(ms)
+        del D
+        del L
+    recording_count = len(sources_to_ms)
+    speaker_count = len(sources_to_ms) * 2
+    annotation_count = 0
+    overlap_speakers = 0
+    total_ms = 0
+    overlap_ms = 0
+    for src in sources_to_ms:
+        mss = sources_to_ms[src]
+        for ms in mss:
+            total_ms += ms
+        if len(mss) > 1:
+            overlap_ms += min(mss)
+            overlap_speakers += 2
+        annotation_count += len(mss)
+    print("ANNOTATION STATISTICS:")
+    print(f"- Recordings: {recording_count}")
+    print(f"- Annotations: {annotation_count}")
+    print(f"- Minutes: {(total_ms/1000)/60:.2f}")
 
 def read_DL_metadata_from_name(name):
     name = nt.file_swap(name, "npz")
@@ -317,10 +404,17 @@ def get_turn_taking_features(times, starting, t_max):
 
     labels = []
     for speaker in speakers:
-        labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "ic:turn"))
+        labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, f"{nt.AA_TAG}:turn"))
     L = npw.string_array(labels)
     
     return D, L
+
+def add_turntaking(D, L):
+    times, starting = ana.turn_taking_times_comparative(D, L, n=10000)
+    tt_D, tt_L = get_turn_taking_features(times, starting, t_max=D.shape[1])
+    D_concat = np.concat([D, tt_D], axis=0)
+    L_concat = np.concat([L, tt_L], axis=0)
+    return D_concat, L_concat
 
 def get_all_segment_labels(segments):
     labels = set()
@@ -435,6 +529,64 @@ def get_all_features():
         for label in read_DL_from_name(npz)[2].tolist():
             features.add(nt.find_feature(label))
     return sorted(list(features))
+
+def cut_badrows(D, L):
+    nan_filt = np.any(~np.isnan(D) & ~np.isinf(D) & ~np.isclose(D,0), axis=1)
+    return D[nan_filt, :], L[nan_filt]
+
+def find_duplicate_indexes(L):
+    unique_labels = []
+    duplicate_groups = []
+    for l in sorted(list(set(L.tolist()))):
+        indexes = np.where(L == l)[0]
+        if len(indexes) == 1:
+            unique_labels.append(indexes[0])
+        else:
+            duplicate_groups.append(indexes)
+    return unique_labels, duplicate_groups
+
+def clean_duplicates(D, L, unique_labels, duplicate_groups):
+    Ds = [D[unique_labels,:]]
+    Ls = [L[unique_labels]]
+    for duplicate_labels in duplicate_groups:
+        max_D = np.nanmax(D[duplicate_labels], axis=0)
+        min_D = np.nanmax(D[duplicate_labels], axis=0)
+        abs_max_D = max_D
+        min_D_highher_max = np.where(np.abs(max_D) < np.abs(min_D))
+        abs_max_D[min_D_highher_max] = min_D[min_D_highher_max]
+        duplicate_D = np.expand_dims(abs_max_D, axis=0)
+        label = L[duplicate_labels][0]
+        Ds.append(duplicate_D)
+        Ls.append(np.expand_dims(label, axis=0))
+    return np.concat(Ds, axis=0), np.concat(Ls, axis=0)
+
+def cleaning(D, L):
+    starting = L.shape[0]
+    D, L = cut_badrows(D, L)
+    ending = L.shape[0]
+    bad_rows_cut = starting - ending
+
+    starting = L.shape[0]
+    ul, dg = find_duplicate_indexes(L)
+    D, L = clean_duplicates(D, L, ul, dg)
+    ending = L.shape[0]
+    duplicates_cut = starting - ending
+
+    starting = np.sum(np.isnan(D))
+    D = np.nan_to_num(D, copy=True, nan=np.nan, posinf=np.nan, neginf=np.nan)
+    ending = np.sum(np.isnan(D))
+    infs_cut = ending - starting
+
+    return D, L, bad_rows_cut, duplicates_cut, infs_cut
+
+def clean_DL(name, D, L):
+    start_shape = D.shape
+    D, L, bad_rows_cut, duplicates_cut, infs_cut = cleaning(D, L)
+    write_DL(name, D, L, write_to_manifest=False)
+    end_shape = D.shape
+    npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
+
+    return [dl.write_to_manifest_file_change("data_matrix", npz_path, start_shape, f"{end_shape} ({bad_rows_cut}, {duplicates_cut}; {infs_cut})", "clean_DL")]
         
 if __name__ == '__main__':
     globals()[sys.argv[1]]()

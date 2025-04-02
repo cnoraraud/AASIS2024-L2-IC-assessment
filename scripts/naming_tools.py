@@ -1,5 +1,6 @@
 import re
 import pathlib as p
+from collections import Counter
 import numpy_wrapper as npw
 
 def get_name(path):
@@ -103,6 +104,7 @@ def find_feature(label):
     if candidate: return candidate
     return "unknown_feature"
 
+AA_TAG = "ic"
 ANNOTATION_TAG = "(ann.)"
 EXTRACTION_TAG = "(ext.)"
 UNKNOWN_TAG = "(unk.)"
@@ -157,7 +159,24 @@ def get_anon_source(source):
             return npw.SPEAKER2
     return npw.SPEAKERNONE
 
-def compact_sources(sources):
+def find_best_candidate(candidates):
+    c = Counter(candidates)
+    best = []
+    best_count = 0
+    for key in c:
+        count = c[key]
+        if count > best_count:
+            best.clear()
+            best_count = count
+        if count == best_count:
+            best.append(key)
+    return best
+
+def compact_sources(sources, plural_nicks = False):
+    if len(sources) == 1: return sources[0]
+    if plural_nicks and len(sources) == 0: return npw.SPEAKERNONE
+    if plural_nicks and len(sources) > 1: return npw.SPEAKERS
+    if len(sources) == 0: return ""
     return "-".join(sorted(list(set(sources))))
 
 def find_extra(label):

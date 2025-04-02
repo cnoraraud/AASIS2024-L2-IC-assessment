@@ -6,6 +6,61 @@ import npz_reader as npzr
 import npy_reader as npyr
 import analysis as ana
 
+
+class DRows:
+    
+    def __init__(self):
+        self.labels = []
+        self.values = []
+
+    def append(self, label, value):
+        self.labels.append(label)
+        self.values.append(value)
+    
+    def text(self):
+        max_len = 0
+        for l in self.labels:
+            max_len = max(max_len, len(l))
+
+        rows = []
+        for l, val in zip(self.labels, self.values):
+            row = f"{l.rjust(max_len, " ")}:\t{val}"
+            rows.append(row)
+        
+        return "\n".join(rows)
+
+def describe_summary(summary):
+    drows = DRows()
+    drows.append("name", summary["name"])
+    drows.append("features", summary["general"]["features"])
+    length = summary["general"]["length"]
+    performance_length = summary["general"]["performance_length"]
+    drows.append("length", f"{performance_length} ({length})")
+
+    non_nan_values = 0
+    non_nan_fields = 0
+    fields = 0
+    for label_key in summary["label_summaries"]:
+        self = summary["label_summaries"][label_key]["self"]
+        others = summary["label_summaries"][label_key]["others"]
+        for key in self.keys():
+            fields += 1
+            c = npw.count(self[key])
+            non_nan_values += c
+            if (c > 0):
+                non_nan_fields += 1
+        for others_key in others.keys():
+            other = others[others_key]
+            for key in other.keys():
+                fields += 1
+                c = npw.count(other[key])
+                non_nan_values += c
+                if (c > 0):
+                    non_nan_fields += 1
+    drows.append("valid fields", f"{non_nan_fields} ({fields})")
+    drows.append("valid values", non_nan_values)
+    print(drows.text())
+
 def load_summaries(names):
     # volatile function, when you make changes, make sure you also make changes in reflective functions
     # - get labels
@@ -103,8 +158,8 @@ def get_labels(summaries):
     # volatile function, when you make changes, make sure you also make changes in reflective functions
     # - analysis.py summarize_analyses
     # - load_summaries
-    my_label = get(summaries, f"*/summary/*/self/label")
-    other_labels = get(summaries, f"*/summary/*/others/*/other_label")
+    my_label = get(summaries, f"*/summary/label_summaries/*/self/label")
+    other_labels = get(summaries, f"*/summary/label_summaries/*/others/*/other_label")
     labels_1 = flatten_to_set([my_label])
     labels_2 =  flatten_to_set([other_labels])
     labels_all = flatten_to_set([my_label, other_labels])
@@ -242,6 +297,8 @@ def gather_session_samples(summaries, feature_name, self_labels=None, other_labe
         summary = summaries[summary_key]
         sample = get_samples(summary, feature_name, self_labels=self_labels, other_labels=other_labels, sanitize=sanitize, sanitize_value=sanitize_value, sample_size=sample_size)
         session_samples[npy] = {"npy": npy, "sample": sample, "self_labels": self_labels, "other_labels": other_labels}
+    
+    return session_samples
 
 def seperate_speaker_from_session(speaker, sample, self_labels, other_labels):
     self_mask = npzr.has(self_labels, speaker)
@@ -253,7 +310,7 @@ def seperate_speaker_from_session(speaker, sample, self_labels, other_labels):
     return new_sample, new_self_labels, new_other_labels
 
 def collapse_sessions_to_speakers(session_samples):
-    speaker_samples = {}
+    speaker_samples = dict()
 
     for sample_key in session_samples:
         session_sample = session_samples[sample_key]
@@ -267,25 +324,31 @@ def collapse_sessions_to_speakers(session_samples):
             speaker_samples[new_npy] = {"npy": new_npy, "sample": new_sample, "self_labels": new_self_labels, "other_labels": new_other_labels}
     return speaker_samples
         
+# Feature is already chosen
 def map_samples_to_common_matrix(all_samples):
     all_self_labels = set()
     all_other_labels = set()
+    all_shapes = set()
     for sample_key in all_samples:
         sample = all_samples[sample_key]
         all_self_labels.update(set(sample["self_labels"].tolist()))
         all_other_labels.update(set(sample["other_labels"].tolist()))
+        print(np.shape(sample["sample"]))
+        #all_shapes.update()
     all_self_labels = npw.string_array(sorted(list(all_self_labels)))
     all_other_labels = npw.string_array(sorted(list(all_other_labels)))
 
-    shape = ()
+    shape = (len(all_samples), all_self_labels.shape[0], all_other_labels.shape[0])
     mega_matrix = np.full(shape=shape)
 
-    for sample_key in all_samples:
+    for i, sample_key in enumerate(all_samples):
         sample = all_samples[sample_key]
         self_labels = sample["self_labels"]
         other_labels = sample["other_labels"]
         self_mask = np.isin(all_self_labels, self_labels)   
         other_mask = np.isin(all_other_labels, other_labels)
+
+        mega_matrix[i, self_mask, other_mask, :] = sample
     
     #TODO: The big one
         

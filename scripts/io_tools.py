@@ -12,12 +12,21 @@ import naming_tools as nt
 import time
 import data_logger as dl
 
+def find_config_directory(n = 3):
+    path_string = './config/'
+    for i in range(n):
+        dir = p.Path(path_string)
+        if dir.exists() and dir.is_dir():
+            return dir
+        path_string = "." + path_string
+    raise IOError("Config folder not found upstream from script!") 
+
 def get_config_private():
-    with open('../config/privateconfig.yml', 'r') as file:
+    with open((find_config_directory() / 'privateconfig.yml'), 'r') as file:
         return yaml.safe_load(file)
 
 def get_config_public():
-    with open('../config/publicconfig.yml', 'r') as file:
+    with open((find_config_directory() / 'publicconfig.yml'), 'r') as file:
         return yaml.safe_load(file)
 
 def private_data_path(key):
@@ -312,6 +321,7 @@ def source_annotated_data_fuzzy():
         except Exception as e:
             print(traceback.format_exc())
             manifest.error(e)
+    manifest.end()
 
 def any_in(search_string, sub_strings):
     for sub_string in sub_strings:

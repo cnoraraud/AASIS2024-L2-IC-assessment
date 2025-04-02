@@ -258,7 +258,7 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
         feature, source = sanitize(label)
         if isinstance(source, type(None)):
             source = nt.ALL_SOURCE
-        labels.append(nt.create_label(source, feature, nt.ANNOTATION_TAG))
+        labels.append(nt.create_label(source, nt.ANNOTATION_TAG, feature))
     
     labels = npw.string_array(labels)
     return data, labels

@@ -12,7 +12,7 @@ import npy_reader as npy
 import data_displayer as dd
 import io_tools as iot
 import data_logger as dl
-
+import naming_tools as nt
 
 def get_prints_data(key, row, wavs):
     return [f"{key}, wavs: {len(wavs)}"]
@@ -48,11 +48,11 @@ def get_labelled_tier_labels(key, row, wavs):
 
 def create_all_data():
     res = iterate_through_data_provider(create_and_write_DLs)
-    print(res)
+    #print(res)
 
 def summarize_all_data():
     res = iterate_through_npz_provider(summarize_data)
-    print(res)
+    #print(res)
 
 def create_data_matrix(key, row, wavs):
     t_max = wavr.find_wavs_t_max(wavs)
@@ -110,12 +110,12 @@ def display_data(name, D, L):
 
 def create_and_write_DLs(key, row, wavs):
     D, L = create_data_matrix(key, row, wavs)
-    filename = npzr.write_DL(key, D, L)
-    return [filename]
+    res = npzr.write_DL(key, D, L)
+    return res
 
 def summarize_data(name, D, L):
-    filename = npy.summarize_data(name, D, L)
-    return [filename]
+    res = npy.summarize_data(name, D, L)
+    return res
 
 def iterate_through_data_provider(method, n = math.inf, offset = 0):
     i = 0
@@ -159,11 +159,11 @@ def display_all_data():
 
 def write_joysticks_to_all_data():
     res = iterate_through_npz_provider(write_joystick_to_data)
-    print(res)
+    #print(res)
 
 def write_facial_features_to_all_data():
     res = iterate_through_npz_provider(write_facial_feature_to_data)
-    print(res)
+    #print(res)
 
 def iterate_through_npz_provider(method, n = math.inf, offset = 0):
     i = 0

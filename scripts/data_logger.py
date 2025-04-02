@@ -5,10 +5,12 @@ import pathlib as p
 
 def tstring(log_string, l=1):
     today = datetime.now()
+    fs = " "
     if l == 0:
         today = ""
+        fs = ""
     tabs = "\t"*l
-    return f"{today}{tabs}{log_string}"
+    return f"{tabs}{today}{fs}{log_string}"
 
 def tprint(log_string):
     print(tstring(log_string))
@@ -16,7 +18,9 @@ def tprint(log_string):
 def log(log_string):
     tprint(log_string)
 
-def log_stack():
+def log_stack(log_string=None):
+    if not isinstance(log_string, type(None)):
+        log(log_string)
     tprint(traceback.format_exc())
 
 def hand_base(name, mtime):
@@ -54,7 +58,7 @@ def write_to_manifest_file_change(manifest_type, path, pre_change, post_change, 
     log_string = "unknown"
     with open_manifest(manifest_type) as manifest:
         left_hand = hand_base(name, mtime)
-        log_string = f"{left_hand} [{pre_change}] => [{post_change}] : [{change_type}]"
+        log_string = f"{left_hand} [{pre_change}] => [{post_change}]"
         if not isinstance(change_type, type(None)):
             log_string = f"{log_string} : [{change_type}]"
         twrite(manifest, log_string)

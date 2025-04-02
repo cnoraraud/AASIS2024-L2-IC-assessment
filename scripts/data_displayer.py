@@ -7,7 +7,9 @@ import numpy_wrapper as npw
 import eaf_reader as eafr
 import npz_reader as npzr
 import io_tools as iot
+import naming_tools as nt
 import filtering as filt
+import analysis as ana
 
 def sanitize_labels(labels, tag=""):
     labels = npw.string_array(labels)
@@ -22,31 +24,88 @@ def sanitize_labels(labels, tag=""):
         sanitized_labels[i] = f"{sanitized_number}{tagspace}{sanitized_label}"
     return sanitized_labels
 
-def cc(data, labels, title, reorder=True, rescale_rows=True, style="discrete"):
+def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False):
+    labels = npzr.anonymize_speakers(labels)
+    relationship_filter = npzr.has(labels, nt.ANNOTATION_TAG) & ~npzr.has(labels, npw.SPEAKERS)
+    S1_filter = npzr.has(labels, npw.SPEAKER1) & relationship_filter
+    S2_filter = npzr.has(labels, npw.SPEAKER2) & relationship_filter
+    D1, L1 = npzr.do_label_select(data, labels, S1_filter)
+    D2, L2 = npzr.do_label_select(data, labels, S2_filter)
+    L1 = npzr.strip_label_slots(L1)
+    L2 = npzr.strip_label_slots(L2)
+    L_common = npw.string_array(sorted(list(set(L1.tolist()) | set(L2.tolist()))))
+    L1_incommon = np.isin(L_common, L1)
+    L2_incommon = np.isin(L_common, L2)
+    D_common_shape = (L_common.shape[0], data.shape[1])
+    D1_common = np.full(D_common_shape, np.nan)
+    D2_common = np.full(D_common_shape, np.nan)
+    D1_common[L1_incommon, :] = D1
+    D2_common[L2_incommon, :] = D2
+
+    plot_labels = L_common
+    if npw.is_string(plot_labels):
+            plot_labels = [plot_labels]
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig.set_figwidth(15)
+    fig.set_figheight(len(L_common)/4)
+    fig.suptitle(f"{title}", fontsize=16)
+    fig.supxlabel('Time (ms)')
+    fig.supylabel('Feature')
+    
+    if reorder:
+        D1_common, L_common = npzr.reorder_data(D1_common, L_common)
+        D2_common, L_common = npzr.reorder_data(D2_common, L_common)
+
+    cc(D1_common, L_common, npw.SPEAKER1, fig=fig, ax=ax1, reorder=False, rescale_rows=rescale_rows, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
+    cc(D2_common, L_common, npw.SPEAKER2, fig=fig, ax=ax2, reorder=False, rescale_rows=rescale_rows, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
+    plt.show()
+
+def cc(data, labels, title, reorder=True, rescale_rows=True, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None):
+    individual = fig == None or ax == None
     cmap = None
     if style == "discrete":
         cmap = "nipy_spectral"
     elif style == "uniform":
         cmap = "gist_heat"
+    elif style == "symmetrical":
+        cmap = "berlin"
     else:
         cmap = style
     plot_data = data
     plot_labels = labels
-    if rescale_rows:
+    if rescale_rows == "01":
         plot_data = filt.to_01(plot_data)
+        vmin = 0
+        vmax = 1
+    elif rescale_rows == "asym":
+        plot_data = filt.norm(plot_data)
+        vmin = -1
+        vmax = 1
+    elif rescale_rows == "sym":
+        plot_data = np.abs(filt.norm(plot_data))
+        vmin = 0
+        vmax = 1
+    else:
+        vmin = np.nanmin(plot_data)
+        vmax = np.nanmax(plot_data)
+    if not isinstance(max_t, type(None)):
+        plot_data = ana.apply_method_to_all_features(plot_data, filt.fit_to_size, {"t":max_t, "destructive":True})
     if reorder:
         plot_data, plot_labels = npzr.reorder_data(plot_data, plot_labels)
     if npw.is_string(plot_labels):
         plot_labels = [plot_labels]
-    fig, (ax) = plt.subplots(1, 1)
-    fig.set_figwidth(15)
-    fig.set_figheight(len(plot_labels)/4)
-    ax.imshow(np.atleast_2d(plot_data), cmap=cmap, aspect='auto', interpolation='none', norm='symlog')
+    if individual:
+        fig, (ax) = plt.subplots(1, 1)
+        fig.set_figwidth(20)
+        fig.set_figheight(len(plot_labels)/4)
+    cax = ax.imshow(np.atleast_2d(plot_data), cmap=cmap, aspect='auto', interpolation='none', norm=norm, vmin=vmin, vmax=vmax)
+    if colorbar: fig.colorbar(cax)
     ax.tick_params(top=False, labeltop=False, bottom=True, labelbottom=True, left=False, labelleft=True, right=False, labelright=False)
     ax.set_title(title)
     if len(plot_labels) > 0:
         ax.set_yticks(np.arange(len(plot_labels)), labels = plot_labels)
-    plt.show()
+    if individual:
+        plt.show()
 
 def r(data, labels, title, colorbar=False, vmin=None, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True):
     individual = fig == None or ax == None
@@ -65,19 +124,18 @@ def r(data, labels, title, colorbar=False, vmin=None, vmax=None, fig = None, ax 
     if individual:
         plt.show()
 
-def plot_line(feature, color, n=500, label="", smooth=False, x_axis=None):
-    if np.size(feature) == 0:
+def plot_line(y, color, n=500, label="", smooth=False, x=None, alpha=1):
+    if np.size(y) == 0:
         return
-    if isinstance(x_axis, type(None)):
-        x_axis = np.arange(feature.shape[0])
-    main_alpha = 1
+    if isinstance(x, type(None)):
+        x = np.arange(y.shape[0])
     if smooth: 
-        feature_smooth = filt.ma(feature, {"n":n})
+        feature_smooth = filt.ma(y, {"n":n})
         feature_smooth = filt.ma(feature_smooth, {"n":n})
         feature_smooth = filt.ma(feature_smooth, {"n":n})
-        plt.plot(x_axis, feature_smooth, color = color, ls='--')
-        main_alpha = 0.25
-    plt.plot(x_axis, feature, color = color, alpha = main_alpha, label=label)
+        plt.plot(x, feature_smooth, color = color, ls='--')
+        alpha = 0.25
+    plt.plot(x, y, color = color, alpha = alpha, label=label)
 
 def round_to_mult(num, mult = 10):
     anchor = 1
@@ -100,48 +158,66 @@ def round_to_closest_mult(num, mults=[2,4,8,5,10,20]):
             best_round = mult_round
     return best_round
 
-def plot_feature(matrix, labels, feature_name, task_name, mid_point=None, save_fig=False, force_scale=False, n=500, do_lines=True, x_is_ratio=False):
-    # Data preparation
+
+def get_axes(matrix, labels, feature_name, do_lines=True):
     matching_labels = npzr.has(labels, feature_name)
-    matched_labels = labels[matching_labels]
+    matched_labels = labels[npzr.has(labels, feature_name)]
     line_count = round(sum(matching_labels))
-    
     unstacked_features = matrix[matching_labels,:,:]
     t = unstacked_features.shape[1]
-    x_axis = np.arange(t) - 1
-    if np.isscalar(mid_point):
-        x_axis = x_axis - mid_point
-    if x_is_ratio:
-        x_axis = x_axis / np.max(np.abs(x_axis))
-
     features = unstacked_features.transpose(1, 0, 2).reshape(t, -1)
+    N = round(features.shape[-1]/line_count)
     features = np.nan_to_num(features)
     
-    samples = round(features.shape[-1]/line_count)
-    draw_smooths = samples < 30 or line_count <= 3
-    draw_grid = t > 50000
-
-    # Plots
     y_max = 0
     y_min = 0
-    color = iter(plt.cm.rainbow(np.linspace(0, 1, line_count)))
+    
+    axes = []
     if do_lines:
         for i in range(line_count):
             label = " ".join(matched_labels[i].split(" ")[0:])
-            feature = np.nanmean(features[:, i*samples:(i+1)*samples], axis=-1)
+            feature = np.nanmean(features[:, i*N:(i+1)*N], axis=-1)
             y_max = max(y_max, np.max(feature))
             y_min = min(y_min, np.min(feature))
-            plot_line(feature, color = next(color), label=f'{label}', smooth=draw_smooths, x_axis=x_axis, n=n)
+            axes.append({"y": feature, "label": label, "type": "subset", "sample_N": N})
     if line_count > 1 or not do_lines:
+        label = "Combined"
         feature_means = np.nanmean(features, axis=-1)
         y_max = max(y_max, np.max(feature_means))
         y_min = max(y_min, np.min(feature_means))
-        plot_line(feature_means, color = 'black', label=f'Combined', smooth=draw_smooths, x_axis=x_axis, n=n)
+        axes.append({"y": feature_means, "label": label, "type": "superset", "sample_N": N*line_count})
+
+    return {"axes": axes, "N": len(axes), "sample_N": N, "t": t, "y_lim": (y_min, y_max), "feature_name": feature_name}
+
+def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scale=False, x_is_ratio=False):
+    # Find x axis
+    x = np.arange(plt_data["t"]) - 1
+    if np.isscalar(mid_point):
+        x = x - mid_point
+    if x_is_ratio:
+        x = x / np.max(np.abs(x))
+    
+    draw_smooths = plt_data["sample_N"] < 30 or plt_data["N"] <= 3
+    draw_grid = plt_data["t"] > 50000
+
+    # Plots
+    color = iter(plt.cm.rainbow(np.linspace(0, 1, plt_data["N"])))
+    for ax in plt_data["axes"]:
+        ax_color = "black"
+        if ax["type"] == "subset":
+            ax_color = next(color)
+        if ax["type"] == "superset":
+            ax_color = "black"
+        y = ax["y"]
+        label = ax["label"]
+        plot_line(y, color=ax_color, label=f"{label}", smooth=draw_smooths, x=x)
+    
     if np.isscalar(mid_point):
         plt.axvline(0, c = 'black', alpha=0.5, lw=1, label="Event Point")
+    y_lim = plt_data["y_lim"]
     if force_scale:
-        y_bot = min(0, y_min)
-        y_top = max(y_max, 1)
+        y_bot = min(0, y_lim[0])
+        y_top = max(y_lim[1], 1)
         y_round_sym = max(round_to_closest_mult(y_bot), round_to_closest_mult(y_top))
         y_top = y_round_sym
         if y_bot < 0:
@@ -150,11 +226,12 @@ def plot_feature(matrix, labels, feature_name, task_name, mid_point=None, save_f
         plt.ylim(y_bot, y_top)
     if draw_grid:
         plt.grid(True, which='both', axis='y')
-    plt.xlim(np.min(x_axis), np.max(x_axis))
+    plt.xlim(np.min(x), np.max(x))
 
     # Legend and Title
+    feature_name = plt_data["feature_name"]
     title = f"Mean occurrences of \'{feature_name}\' in task \'{task_name}\'"
-    modifiers = [f"(N={features.shape[-1]})"]
+    modifiers = [f"(N={plt_data["sample_N"]})"]
     if np.isscalar(mid_point):
         modifiers.insert(0, "on speaker change")
     title_modifiers = " ".join(modifiers)
@@ -176,33 +253,39 @@ def plot_feature(matrix, labels, feature_name, task_name, mid_point=None, save_f
     else:
         plt.show()
 
-def produce_figures_turn_taking(task_name, feature_name, n = 5000, use_density = False):
+def get_plt_data_turn_taking(task_name, feature_name, n = 5000, use_density = False):
+    # only looking at one feature at a time does not optimize for cpu time when working with a batch, but uses less ram
     total_segments = []
-    # if there is no limit for ram usage, the whole data could be collected instead
-    # for every segment and you would only have to do one pass of file reads
-    # to produce all the graphs
     for npz in npzr.npz_list():
         if task_name in npz:
             segments = npzr.get_turn_taking_data_segments(npz, [[("has",feature_name)]], n = n, use_density = use_density)
             total_segments += segments
     TL, TD, mid_point = npzr.combined_segment_matrix_with_anchor(total_segments)
-    plot_feature(TD, TL, feature_name, task_name, mid_point = mid_point, save_fig=True)
+    plt_data = get_axes(TD, TL, feature_name)
     del TL
     del TD
+    return plt_data, mid_point
 
-def produce_figures_overall(task_name, feature_name):
+def get_plt_data_overall(task_name, feature_name):
+    # only looking at one feature at a time does not optimize for cpu time when working with a batch, but uses less ram
     total_segments = []
-    # if there is no limit for ram usage, the whole data could be collected instead
-    # for every segment and you would only have to do one pass of file reads
-    # to produce all the graphs
     for npz in npzr.npz_list():
         if task_name in npz:
             segments = npzr.get_entire_data_as_segment(npz, [[("has",feature_name)]])
             total_segments += segments
     TL, TD = npzr.combined_segment_matrix_with_interpolation(total_segments)
-    plot_feature(TD, TL, feature_name, task_name, save_fig=True, do_lines=False, x_is_ratio=True, force_scale=True, n = 20000)
+    plt_data = get_axes(TD, TL, feature_name, do_lines=False)
     del TL
     del TD
+    return plt_data
+
+def produce_figures_turn_taking(task_name, feature_name, n = 5000, use_density = False):
+    plt_data, mid_point = get_plt_data_turn_taking(task_name, feature_name, n = n, use_density = use_density)
+    plot_feature(plt_data, task_name, mid_point = mid_point, save_fig=True)
+
+def produce_figures_overall(task_name, feature_name):
+    plt_data = get_plt_data_overall(task_name, feature_name)
+    plot_feature(plt_data, task_name, x_is_ratio=True, force_scale=True, save_fig=True)
 
 def produce_all_figures_turn_taking():
     feature_names = npzr.get_all_features()

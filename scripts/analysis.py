@@ -5,6 +5,7 @@ import numpy_wrapper as npw
 import npz_reader as npzr
 import filtering as filt
 import analysis as ana
+import data_logger as dl
 
 def apply_method_to_feature(data, method, properties = {}):
     return method(data, properties = properties)
@@ -25,7 +26,8 @@ def apply_method_to_select(data, method, select, properties = {}):
                 max_length = max(max_length, new_data_list[i].shape[0])
         new_data = np.empty((len(new_data_list), max_length))
         for i in range(select.shape[0]):
-            new_data[i, :new_data_list[i].shape[0]] = new_data_list[i]
+            if not isinstance(new_data_list[i], type(None)):
+                new_data[i, :new_data_list[i].shape[0]] = new_data_list[i]
         return new_data
     else:
         new_data = np.copy(data)
@@ -38,20 +40,27 @@ def analyze_feature(data, method, i, properties={}):
     return method(data[i,:], properties=properties)
 
 def analyze_all_features(data, method, properties):
-    return analyze_select(data, method, np.any(~np.isnan(data), axis=1), properties=properties)
+    ignore_nans = False
+    if "ignore_nans" in properties:
+        ignore_nans = properties["ignore_nans"]
+    filter = np.full(data.shape[0], True)
+    if ignore_nans:
+        filter = np.any(~np.isnan(data), axis=1)
+    return analyze_select(data, method, filter, properties=properties)
 
 def try_analyze(data, method, select, i, properties={}):
     if select[i]:
         try:
             return analyze_feature(data, method, i, properties=properties), i
         except Exception as e:
-            print(f"Exception at {i}:\n{e}")
+            print(f"Exception at {method.__name__}:{i}-\n{e}")
     return None, i
 
 def analyze_select(data, method, select, properties={}):
     parallel = False
     if "parallel" in properties:
         parallel = properties["parallel"]
+    
     if not parallel:
         results = [None] * select.shape[0]
         for i in range(select.shape[0]):
@@ -197,39 +206,68 @@ def get_segment_masses_and_widths(a, properties):
 
     return {"masses": np.array(masses), "widths": np.array(widths)}
 
-def get_all_corellations(labels, data):
+def get_all_correlations(labels, data):
     pearsoncorrs = np.corrcoef(data)
     spearmancorrs = np.array(analyze_all_features(data, find_spearmanr, {"B":data}))
 
-    all_corrs = []
+    res = dict()
     for i in range(labels.shape[0]):
+        label = labels[i]
         pearsoncorrs_row = pearsoncorrs[i, :]
         spearmancorrs_row = spearmancorrs[i, :]
         corrs = {"pearson_corrs": pearsoncorrs_row, "spearman_corrs": spearmancorrs_row}
-        all_corrs.append(corrs)
-    return all_corrs
+        res[label] = corrs
+    return res
 
 def get_all_segment_overlaps_and_delays(labels, data):
-    return analyze_all_features(data, get_segment_overlaps_and_delays, {"B": data})
+    onds = analyze_all_features(data, get_segment_overlaps_and_delays, {"B": data})
+    res = dict()
+    for l, ond in zip(labels, onds):
+        res[l] = ond
+    return res
 
 def get_all_segment_masses_and_widths(labels, data):
-    return analyze_all_features(data, get_segment_masses_and_widths, {"B": data})
+    smws = analyze_all_features(data, get_segment_masses_and_widths, {"B": data})
+    res = dict()
+    for l, smw in zip(labels, smws):
+        res[l] = smw
+    return res
 
-def group_analyses(L, *args):
+
+analysis_order = ["overlaps_and_delays","masses_and_widths","correllations"]
+def group_analyses(L, *analyses):
     groups = []
     for i in range(L.shape[0]):
-        group = {"label": L[i]}
-        for j, arg in enumerate(args):
-            if arg[i] is None:
-                print(f"Analysis {j} missing for label {L[i]}")
+        label = L[i]
+        group = {"label": label}
+        for arg_num, analysis in enumerate(analyses):
+            if isinstance(analysis, type(None)):
+                dl.log(f"Analysis {analysis_order[arg_num]} missing.")
                 continue
-            group.update(arg[i])          
+            if not isinstance(analysis, type(None)) and label in analysis:
+                label_analysis = analysis[label]
+                if not isinstance(label_analysis, type(None)):
+                    group.update(label_analysis)
         groups.append(group)
     return groups
 
-def summarize_analyses(L, analyses, q=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]):
+
+def label_map(L, sub_L):
+    L_map = dict()
+    for i, l in enumerate(L):
+        j_search = np.argwhere(sub_L == l).flatten()
+        if j_search.size > 0:
+            j = j_search[0]
+            L_map[i] = j
+    return L_map
+
+def summarize_analyses(L, analyses, Ls, q=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]):
     # volatile function, when you make changes, make sure you also make changes in reflective functions
     # - summary_reader.py get_labels
+    L_map_ond = label_map(L, Ls["overlaps_and_delays"])
+    L_map_mnw = label_map(L, Ls["masses_and_widths"])
+    L_map_corr = label_map(L, Ls["correlations"])
+    
     summaries = dict()
     for a in analyses:
         self_summary = dict()
@@ -271,8 +309,14 @@ def summarize_analyses(L, analyses, q=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]):
         for i in range(L.shape[0]):
             other_summary = dict()
             other_label = L[i]
-            other_overlaps = overlaps[i]
-            other_delays = delays[i]
+
+            j_ond = None if i not in L_map_ond else L_map_ond[i]
+            j_corr = None if i not in L_map_corr else L_map_corr[i]
+
+            other_overlaps = None if not npw.valid(overlaps) or isinstance(j_ond, type(None)) else overlaps[j_ond]
+            other_delays = None if not npw.valid(delays) or isinstance(j_ond, type(None)) else delays[j_ond]
+            pearson_corr = None if not npw.valid(pearson_corrs) or isinstance(j_corr, type(None)) else pearson_corrs[j_corr]
+            spearman_corr = None if not npw.valid(spearman_corrs) or isinstance(j_corr, type(None)) else spearman_corrs[j_corr]
 
             overlap_counts = npw.count_lengths(other_overlaps)
             overlap_sums = npw.sum_lengths(other_overlaps)
@@ -282,13 +326,11 @@ def summarize_analyses(L, analyses, q=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]):
             other_delays_all = npw.group_arrays(other_delays)
 
             other_summary["label"] = label
-            other_summary["valid"] = npw.valid(other_overlaps) or npw.valid(other_delays)
             other_summary["other_label"] = other_label
             
             other_summary["count_overlap"] = npw.count(other_overlaps_all)
             other_summary["count_delay"] = npw.count(other_delays_all)
 
-            
             other_summary["total_overlap"] = npw.sum_data(other_overlaps_all)
 
             other_summary["mean_overlap"] = npw.mean_data(other_overlaps_all)
@@ -309,8 +351,10 @@ def summarize_analyses(L, analyses, q=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]):
             other_summary["median_segment_delay_count"] = npw.median_data(delay_counts)
             other_summary["median_segment_overlap_ratio"] = npw.median_data(other_overlap_percentage)
             
-            other_summary["pearson_corr"] = pearson_corrs[i]
-            other_summary["spearman_corr"] = spearman_corrs[i]
+            other_summary["pearson_corr"] = pearson_corr
+            other_summary["spearman_corr"] = spearman_corr
+
+            other_summary["valid"] = npw.valid(other_overlaps) or npw.valid(other_delays) or npw.valid(pearson_corrs) or npw.valid(spearman_corrs)
             
             other_summaries[other_label] = other_summary
 
