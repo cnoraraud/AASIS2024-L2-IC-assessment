@@ -287,8 +287,8 @@ def create_missing_folder(tgt):
     os.mkdir(tgt)
     return True
 
-def copy_missing(src, tgt):
-    if p.Path(tgt).exists():
+def copy_missing(src, tgt, overwrite=False):
+    if p.Path(tgt).exists() and not overwrite:
         return False
     shutil.copy(src, tgt)
     return True
@@ -298,7 +298,7 @@ def remove_plural(word):
     if word[-1] == "s": return word[:-1]
     return word
 
-def source_annotated_data_fuzzy():
+def source_annotated_data_fuzzy(overwrite=False):
     manifest = dl.ManifestSession("copy")
     manifest.start()
 
@@ -314,7 +314,7 @@ def source_annotated_data_fuzzy():
                 file_paths = session[tag]
                 file_dst_path = private_data_path(tag)
                 for file_path in file_paths:
-                    if copy_missing(file_path, file_dst_path / file_path.name):
+                    if copy_missing(file_path, file_dst_path / file_path.name, overwrite=overwrite):
                         manifest.new_file(tag_name, file_path.name)
             
             manifest.session_end()

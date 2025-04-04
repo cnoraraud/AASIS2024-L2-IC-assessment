@@ -8,6 +8,12 @@ SPEAKERNONE = "[none]"
 def is_string(value):
     return isinstance(value, str) or isinstance(value, np.str_)
 
+def is_int(value):
+    return isinstance(value, int) or isinstance(value, np.integer)
+
+def is_float(value):
+    return isinstance(value, float) or isinstance(value, np.floating)
+
 def is_speaker_related(speaker, value):
     check_substring = value.split(" ")[0]
     if speaker in check_substring: return True
@@ -15,6 +21,9 @@ def is_speaker_related(speaker, value):
     return False
 
 def get_speakers():
+    return [SPEAKER1, SPEAKER2]
+
+def get_speakers_all():
     return [SPEAKER1, SPEAKER2, SPEAKERS]
 
 def get_speaker_other(speaker):

@@ -24,7 +24,7 @@ def sanitize_labels(labels, tag=""):
         sanitized_labels[i] = f"{sanitized_number}{tagspace}{sanitized_label}"
     return sanitized_labels
 
-def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False):
+def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False, savefig=False, overwrite=True):
     labels = npzr.anonymize_speakers(labels)
     relationship_filter = npzr.has(labels, nt.ANNOTATION_TAG) & ~npzr.has(labels, npw.SPEAKERS)
     S1_filter = npzr.has(labels, npw.SPEAKER1) & relationship_filter
@@ -58,9 +58,17 @@ def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, re
 
     cc(D1_common, L_common, npw.SPEAKER1, fig=fig, ax=ax1, reorder=False, rescale_rows=rescale_rows, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
     cc(D2_common, L_common, npw.SPEAKER2, fig=fig, ax=ax2, reorder=False, rescale_rows=rescale_rows, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
-    plt.show()
+    if savefig:
+        safe_title = nt.sanitize_filename(title)
+        savepath = iot.figs_path() / f"{safe_title}.png"
+        if overwrite or not savepath.exists():
+            plt.savefig()
+            plt.clf()
+            plt.close()
+    else:
+        plt.show()
 
-def cc(data, labels, title, reorder=True, rescale_rows=True, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None):
+def cc(data, labels, title, reorder=True, rescale_rows=True, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True):
     individual = fig == None or ax == None
     cmap = None
     if style == "discrete":
@@ -105,9 +113,17 @@ def cc(data, labels, title, reorder=True, rescale_rows=True, max_t=None, style="
     if len(plot_labels) > 0:
         ax.set_yticks(np.arange(len(plot_labels)), labels = plot_labels)
     if individual:
-        plt.show()
+        if savefig:
+            safe_title = nt.sanitize_filename(title)
+            savepath = iot.figs_path() / f"{safe_title}.png"
+            if overwrite or not savepath.exists():
+                plt.savefig()
+                plt.clf()
+                plt.close()
+        else:
+            plt.show()
 
-def r(data, labels, title, colorbar=False, vmin=None, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True):
+def r(data, labels, title, colorbar=False, vmin=None, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True, savefig=False, overwrite=True):
     individual = fig == None or ax == None
     if individual:
         fig, (ax) = plt.subplots(1, 1)
@@ -122,7 +138,15 @@ def r(data, labels, title, colorbar=False, vmin=None, vmax=None, fig = None, ax 
     ax.set_yticklabels(labels)
     ax.set_title(title)
     if individual:
-        plt.show()
+        if savefig:
+            safe_title = nt.sanitize_filename(title)
+            savepath = iot.figs_path() / f"{safe_title}.png"
+            if overwrite or not savepath.exists():
+                plt.savefig()
+                plt.clf()
+                plt.close()
+        else:
+            plt.show()
 
 def plot_line(y, color, n=500, label="", smooth=False, x=None, alpha=1):
     if np.size(y) == 0:
@@ -189,7 +213,7 @@ def get_axes(matrix, labels, feature_name, do_lines=True):
 
     return {"axes": axes, "N": len(axes), "sample_N": N, "t": t, "y_lim": (y_min, y_max), "feature_name": feature_name}
 
-def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scale=False, x_is_ratio=False):
+def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scale=False, x_is_ratio=False, overwrite=True):
     # Find x axis
     x = np.arange(plt_data["t"]) - 1
     if np.isscalar(mid_point):
@@ -245,13 +269,16 @@ def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scal
         plot_name = "mean-occurrence"
         if np.isscalar(mid_point):
             plot_name = "mean-occurence-turn-taking"
-        safe_title = f"{plot_name}_{task_name}_{feature_name}"
-        safe_title = safe_title.replace(":","-").replace(" ","_")
-        plt.savefig(iot.figs_path() / f"{safe_title}.png")
-        plt.clf()
-        plt.close()
+        safe_title = nt.sanitize_filename(f"{plot_name}_{task_name}_{feature_name}")
+        savepath = iot.figs_path() / f"{safe_title}.png"
+        if overwrite or not savepath.exists():
+            plt.savefig()
+            plt.clf()
+            plt.close()
     else:
         plt.show()
+
+
 
 def get_plt_data_turn_taking(task_name, feature_name, n = 5000, use_density = False):
     # only looking at one feature at a time does not optimize for cpu time when working with a batch, but uses less ram

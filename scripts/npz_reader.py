@@ -169,16 +169,23 @@ def double_speaker_filter(labels):
 def DL_info(D, L):
     return f"{D.shape}"
 
-def write_DL(name, D, L, write_to_manifest=True):
+def write_DL(name, D, L, write_to_manifest=True, overwrite=True):
+    if not overwrite:
+        npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
+        if npz_path.exists():
+            existed_log = f"{npz_path} existed, skipping DL step."
+            dl.tprint(existed_log)
+            return npz_path, [existed_log]
+    
     eaf_path = iot.eafs_path() / nt.file_swap(name, "eaf", all=False)
     npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
     np.savez(npz_path, D=D, L=L)
     input_info = eafr.eaf_info(eaf_path)
     output_info = DL_info(D, L)
     if write_to_manifest:
-        return [dl.write_to_manifest_new_file("data_matrix", eaf_path, npz_path, input_info=input_info, output_info=output_info)]
+        return npz_path, [dl.write_to_manifest_new_file("data_matrix", eaf_path, npz_path, input_info=input_info, output_info=output_info)]
     else:
-        return npz_path
+        return npz_path, [None]
 
 def npz_list():
     npzs = []
@@ -579,10 +586,10 @@ def cleaning(D, L):
 
     return D, L, bad_rows_cut, duplicates_cut, infs_cut
 
-def clean_DL(name, D, L):
+def clean_DL(name, D, L, overwrite=True):
     start_shape = D.shape
     D, L, bad_rows_cut, duplicates_cut, infs_cut = cleaning(D, L)
-    write_DL(name, D, L, write_to_manifest=False)
+    _, _ = write_DL(name, D, L, write_to_manifest=False)
     end_shape = D.shape
     npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
 

@@ -53,7 +53,7 @@ def try_analyze(data, method, select, i, properties={}):
         try:
             return analyze_feature(data, method, i, properties=properties), i
         except Exception as e:
-            print(f"Exception at {method.__name__}:{i}-\n{e}")
+            dl.log(f"try_analyze exception at {method.__name__}:{i}\n\t{e}")
     return None, i
 
 def analyze_select(data, method, select, properties={}):
@@ -284,7 +284,7 @@ def summarize_analyses(L, analyses, Ls, q=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9])
         
         self_summary["label"] = label
         self_summary["valid"] = npw.valid(widths) or npw.valid(masses)
-        self_summary["segment count"] = npw.count(widths)
+        self_summary["segment_count"] = npw.count(widths)
         
         self_summary["total_segment_mass"] = npw.sum_data(masses)
         self_summary["total_segment_width"] = npw.sum_data(widths)

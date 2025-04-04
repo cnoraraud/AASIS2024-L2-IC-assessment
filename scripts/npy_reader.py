@@ -8,7 +8,7 @@ import analysis as ana
 import filtering as filt
 import data_logger as dl
 
-def get_summary_info(summary):
+def get_summary_info_io(summary):
     individual_valid, individual_total, relational_valid, relational_total, valid_structure = sumr.count_label_values(summary)
     features = summary["general"]["features"]
     performance_length = summary["general"]["performance_length"]
@@ -24,7 +24,7 @@ def get_summary_info(summary):
 def write_summary(name, summary):    
     npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
     npy_path = iot.npys_path() / nt.file_swap(name, "npy", all=False)
-    input_info, output_info = get_summary_info(summary)
+    input_info, output_info = get_summary_info_io(summary)
     np.save(str(npy_path), summary)
     del summary
     return [dl.write_to_manifest_new_file("summary", npz_path, npy_path, input_info=input_info, output_info=output_info)]

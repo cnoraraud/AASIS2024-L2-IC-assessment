@@ -165,6 +165,10 @@ def add_joysticks_to_data(data_name, D, L):
 
         name = nt.file_swap(nt.get_name(csv_path))
         canidates = nt.find_best_candidate(nt.find_speakers(name))
+        if len(canidates) > 1:
+            dl.log(f"Mysterious file name ({name}), multiple speakers share a joystick annotation?")
+            continue
+
         source = nt.compact_sources(nt.speakers_to_sources(canidates))
         tag = nt.ANNOTATION_TAG
         annotator = nt.find_annotator(name)

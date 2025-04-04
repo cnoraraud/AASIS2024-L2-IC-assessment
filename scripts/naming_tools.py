@@ -190,3 +190,19 @@ def create_label(source, tag, feature, extra=None):
     if isinstance(extra, type(None)):
         return base_label
     return f"{base_label} {extra}"
+
+def sanitize_filename(filename):
+    filename = filename.replace(":","-")
+    filename = filename.replace(" ","_")
+    filename = filename.replace(" \"", "[")
+    filename = filename.replace("\" ", "]")
+    filename = filename.replace("\"", "#")
+    filename = filename.replace(".", "_")
+    filename = filename.replace("|", "_")
+    filename = filename.replace("?", "")
+    filename = filename.replace("*","")
+    filename = filename.replace("/","_")
+    filename = filename.replace("\\","_")
+    filename = filename.replace("<","(")
+    filename = filename.replace(">",")")
+    return 
