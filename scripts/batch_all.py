@@ -8,13 +8,16 @@ def arg_to_bool(arg):
         return bool(int(arg))
     return False
 
+if len(sys.argv) > 1:
+    arg_string = sys.argv[1]
+
 arg_count = 7
 args = []
 for i in range(arg_count):
-    if len(sys.argv) <= i + i:
+    if len(arg_string) <= i:
         args.append(False)
     else:
-        args.append(arg_to_bool(sys.argv[i + 1]))
+        args.append(arg_to_bool(arg_string[i]))
 dl.log(f"Received args: {args}")
 
 sourcing = args[0]

@@ -8,9 +8,10 @@ from collections import Counter
 
 class DRows:
     
-    def __init__(self, init_dict=None):
+    def __init__(self, init_dict=None, skip_bad=False):
         self.labels = []
         self.values = []
+        self.skip_bad = skip_bad
         if isinstance(init_dict, dict):
             self.add_dictionary(init_dict)
 
@@ -20,6 +21,12 @@ class DRows:
             value = self.describe_array(value)
         if not isinstance(value, list):
             value = [value]
+        if self.skip_bad:
+            try:
+                if not self.check_good(value):
+                    value = []
+            except:
+                pass
         for val in value:
             clean_val = None
             if npw.is_string(val):
@@ -27,7 +34,7 @@ class DRows:
             elif npw.is_int(val):
                 clean_val = f"{val}"
             elif npw.is_float(val):
-                clean_val = f"{val:.2f}"
+                clean_val = f"{val:.3f}"
                 if clean_val[-1] == "0":
                     clean_val = clean_val[:-1]
             else:
@@ -48,8 +55,12 @@ class DRows:
         for val in vals:
             new_vals.append(val.rjust(max_val_len, " "))
         return "\t".join(new_vals)
-        
-    def text(self):
+    
+    def check_good(self, vals):
+        vals = np.array(vals)
+        return np.sum(np.isclose(np.nan_to_num(vals), 0)) < len(vals)
+
+    def text(self, skip_bad=False):
         max_len = 0
         max_val_len = 0
         for l in self.labels:
@@ -60,6 +71,8 @@ class DRows:
 
         rows = []
         for l, vals in zip(self.labels, self.values):
+            if len(vals) == 0:
+                continue
             row = f"{l.rjust(max_len, " ")}:\t{self.vals_to_string(vals, max_val_len)}"
             rows.append(row)
         
@@ -162,6 +175,7 @@ def describe_datas_in_summaries(summaries):
     all_feature_names = get_feature_names(summaries)
     F1 = sorted(list(all_feature_names["F1"]))
     F2 = sorted(list(all_feature_names["F2"]))
+    FG = sorted(list(all_feature_names["FG"]))
     F = sorted(list(all_feature_names["F"]))
     
     print("LABELS")
@@ -172,6 +186,9 @@ def describe_datas_in_summaries(summaries):
     print()
     print("RELATIONAL_FEATURES")
     print_in_blocks(F2)
+    print()
+    print("SESSION_FEATURES")
+    print_in_blocks(FG)
 
 def load_summaries(names):
     # volatile function, when you make changes, make sure you also make changes in reflective functions
@@ -253,6 +270,8 @@ def get(obj, path, supress_escape=False, fallback=None):
                     value = max(0, min(value, len(key_list) - 1))
                     indexed_keyword = key_list[value]
                 return get(current_obj, [indexed_keyword] + path[i+1:], fallback)
+        elif isinstance(keyword, str) and len(keyword) == 0:
+            return current_obj
         
         # Loop continues
         if isinstance(current_obj, dict) and keyword in current_obj:
@@ -261,21 +280,21 @@ def get(obj, path, supress_escape=False, fallback=None):
             return fallback
     return current_obj
 
-def flatten_to_list(structure):
+def flatten_to_list(structure, skip_bad=True):
     flattened_list = []
     for el in structure:
         if isinstance(el, list) or isinstance(el, list):
             flattened_list.extend(flatten_to_list(el))
-        else:
+        elif not skip_bad or not isinstance(el, type(None)):
             flattened_list.append(el)
     return list(flattened_list)
 
-def flatten_to_set(structure):
+def flatten_to_set(structure, skip_bad=True):
     flattened_set = set()
     for el in structure:
         if isinstance(el, list) or isinstance(el, set):
             flattened_set.update(flatten_to_set(el))
-        else:
+        elif not skip_bad or not isinstance(el, type(None)):
             flattened_set.add(el)
     return set(flattened_set)
 
@@ -293,6 +312,10 @@ def get_labels(summaries):
     labels_all.discard(None)
     return {"L1": sorted(list(labels_1)), "L2": sorted(list(labels_2)), "L": sorted(list(labels_all))}
 
+
+def get_npys(samples):
+    return sorted(list(flatten_to_set(get(samples, "?*/?*/npy"))))
+
 def get_shapes(obj):
     shape_counter = Counter()
     for el in flatten_to_list(obj):
@@ -302,7 +325,8 @@ def get_shapes(obj):
 def get_feature_sizes(summaries, feature_name):
     res_feature_self = get(summaries, f"?*/?*/?summary/?label_summaries/?*/self/{feature_name}")
     res_feature_others = get(summaries, f"?*/?*/?summary/?label_summaries/?*/others/*/{feature_name}")
-    feature_shapes = get_shapes([res_feature_self, res_feature_others])
+    res_feature_general = get(summaries, f"?*/?*/?summary/general/{feature_name}")
+    feature_shapes = get_shapes([res_feature_self, res_feature_others, res_feature_general])
     return feature_shapes
 def get_keys(obj):
     key_counter = Counter()
@@ -314,10 +338,12 @@ def get_keys(obj):
 def get_feature_names(summaries):
     res_labels_self = get(summaries, f"?*/?*/?summary/?label_summaries/?*/self")
     res_labels_others = get(summaries, f"?*/?*/?summary/?label_summaries/?*/others/*")
+    res_labels_general = get(summaries, f"?*/?*/?summary/general")
     feature_names_1 = get_keys([res_labels_self])
     feature_names_2 = get_keys([res_labels_others])
-    feature_names_all = get_keys([res_labels_self, res_labels_others])
-    return {"F1": feature_names_1, "F2": feature_names_2, "F": feature_names_all}
+    feature_names_general = get_keys([res_labels_general])
+    feature_names_all = get_keys([res_labels_self, res_labels_others, res_labels_general])
+    return {"F1": feature_names_1, "F2": feature_names_2, "FG": feature_names_general, "F": feature_names_all}
 
 def string_replace(old_value, find, replace):
     if isinstance(old_value,np.str_):
@@ -412,9 +438,9 @@ def sanitize_sample(sample, sanitize_value, sample_size):
 def get_first_non_nan(obj, path):
     res = get(obj, path)
     res = flatten_to_list(res)
-    if None in res:
-        res.remove(None)
-    return res[0]
+    if len(res) > 0:
+        return res[0]
+    return None
 
 def get_samples(summary, feature_name, self_labels=None, other_labels=None, sanitize=True, sanitize_value=np.nan, sample_size=()):
     # Single value per matrix (general)
@@ -450,7 +476,8 @@ def get_samples(summary, feature_name, self_labels=None, other_labels=None, sani
 def gather_session_samples(summaries, feature_name, self_labels=None, other_labels=None, sanitize=True, sanitize_value=np.nan, sample_size=()):
     session_samples = {}
 
-    self_labels = npw.string_array(self_labels)
+    if not isinstance(self_labels, type(None)):
+        self_labels = npw.string_array(self_labels)
     if not isinstance(other_labels, type(None)): 
         other_labels = npw.string_array(other_labels)
 
@@ -465,10 +492,15 @@ def gather_session_samples(summaries, feature_name, self_labels=None, other_labe
     return session_samples
 
 def seperate_speaker_from_session(speaker, sample, self_labels, other_labels):
-    self_mask = npzr.has(self_labels, speaker)
-    new_sample = sample[self_mask]
-
-    new_self_labels = npzr.replace_labels(npw.string_array(self_labels), speaker, "own")[self_mask]
+    
+    if not isinstance(self_labels, type(None)):
+        self_mask = npzr.has(self_labels, speaker)
+        new_sample = sample[self_mask]
+        new_self_labels = npzr.replace_labels(npw.string_array(self_labels), speaker, "own")[self_mask]
+    else:
+        new_sample = sample
+        new_self_labels = self_labels
+    
     if not isinstance(other_labels, type(None)):
         new_other_labels = npzr.replace_labels(other_labels, speaker, "own")
         new_other_labels = npzr.replace_labels(npw.string_array(new_other_labels), npw.get_speaker_other(speaker), "other")
@@ -494,46 +526,31 @@ def collapse_sessions_to_speakers(session_samples):
     return speaker_samples
         
 # Feature is already chosen, all samples have been forced to be the same size
-def map_samples_to_common_matrix(all_samples, sanitize_value=np.nan, sample_size=()):
-    all_self_labels = set()
-    all_other_labels = set()
-    for sample_key in all_samples:
-        sample = all_samples[sample_key]
-        all_self_labels.update(sample["self_labels"])
-        all_other_labels.update(sample["other_labels"])
-    all_self_labels = npw.string_array(sorted(list(all_self_labels)))
-    all_other_labels = npw.string_array(sorted(list(all_other_labels)))
-
-    shape = (len(all_samples), all_self_labels.shape[0], all_other_labels.shape[0]) + sample_size
-    mega_matrix = np.full(shape=shape, fill_value=sanitize_value)
-
-    for i, sample_key in enumerate(all_samples):
-        sample = all_samples[sample_key]
-        self_labels = sample["self_labels"]
-        other_labels = sample["other_labels"]
-        self_mask = np.isin(all_self_labels, self_labels)   
-        other_mask = np.isin(all_other_labels, other_labels)
-
-        mega_matrix[i, self_mask, other_mask] = sample["sample"]
-    
-    return mega_matrix
-
 def map_samples_to_common_matrix(all_samples, all_self_labels=None, all_others_labels=None, sanitize_value=np.nan, sample_size=()):
     # Finding Labels
     find_self_labels = isinstance(all_self_labels, type(None))
     find_others_labels = isinstance(all_others_labels, type(None))
+    
     if find_self_labels:
         all_self_labels = set()
     if find_others_labels:
         all_others_labels = set()
+    all_session_labels = list()
     for sample_key in all_samples:
         sample = all_samples[sample_key]
+        npy = sample["npy"]
+        all_session_labels.append(npy)
+        
         if find_self_labels:
-            all_self_labels.update(sample["self_labels"])
-        other_labels = ["#"]
-        if not isinstance(sample["other_labels"], type(None)):
-            other_labels = sample["other_labels"]
+            self_labels = ["#"]
+            if not isinstance(sample["self_labels"], type(None)):
+                self_labels = sample["self_labels"]
+            all_self_labels.update(self_labels)
+    
         if find_others_labels:
+            other_labels = ["#"]
+            if not isinstance(sample["other_labels"], type(None)):
+                other_labels = sample["other_labels"]
             all_others_labels.update(other_labels)
     if find_self_labels:
         all_self_labels = sorted(list(all_self_labels))
@@ -541,17 +558,19 @@ def map_samples_to_common_matrix(all_samples, all_self_labels=None, all_others_l
         all_others_labels = sorted(list(all_others_labels))
     all_self_labels = npw.string_array(all_self_labels)
     all_others_labels = npw.string_array(all_others_labels)
+    all_session_labels = npw.string_array(all_session_labels)
     
     # Finding Matrix
     sample_shape = (len(all_self_labels), len(all_others_labels)) + sample_size
     shape = tuple([len(all_samples)]) + sample_shape
     mega_matrix = np.full(shape=shape, fill_value=sanitize_value)
-    print(mega_matrix.shape)
     
     for i, sample_key in enumerate(all_samples):
         sample = all_samples[sample_key]
-        self_labels = sample["self_labels"]
+        self_labels = ["#"]
         other_labels = ["#"]
+        if not isinstance(sample["self_labels"], type(None)):
+            self_labels = sample["self_labels"]
         if not isinstance(sample["other_labels"], type(None)):
             other_labels = sample["other_labels"]
         
@@ -559,48 +578,84 @@ def map_samples_to_common_matrix(all_samples, all_self_labels=None, all_others_l
         other_indecies = np.array(np.where(np.isin(all_others_labels, other_labels))[0])
         sample_matrix = np.full(shape=sample_shape,fill_value=sanitize_value)
         
-        if not isinstance(sample["other_labels"], type(None)):
-            sample_matrix[np.ix_(self_indecies, other_indecies)] = sample["sample"]
-        else:
-            sample_matrix[np.ix_(self_indecies, other_indecies)] = np.expand_dims(sample["sample"], axis=1)
+        sample_value = sample["sample"]
+        
+        if isinstance(sample["self_labels"], type(None)):
+            sample_value = np.expand_dims(sample_value, axis=0)
+        if isinstance(sample["other_labels"], type(None)):
+            sample_value = np.expand_dims(sample_value, axis=1)
+        
+        sample_matrix[np.ix_(self_indecies, other_indecies)] = sample_value
         
         mega_matrix[i] = sample_matrix
     
-    return mega_matrix, all_self_labels, all_others_labels
+    return mega_matrix, all_session_labels, all_self_labels, all_others_labels
 
-#TODO: add support for per-session-features (no self_labels or other_labels)
-def get_data_matrix(sample_group, feature_name, self_labels=None, other_labels=None, collapse=False, relational_feature=None):
-    size_mode = get_feature_sizes(sample_group, feature_name).most_common(1)[0][0]
+def find_feature_type(self_features, others_features, general_features, feature_name):
+    feature_type = None
+    if sum([feature_name in self_features, feature_name in others_features, feature_name in general_features]) > 1:
+            print("Multiple options for feature.")
+    if feature_name in self_features:
+        feature_type = "individual"
+    elif feature_name in others_features:
+        feature_type = "relational"
+    elif feature_name in general_features:
+        feature_type = "general"
+    return feature_type
+
+def replace_if_none(origianl_value, replacement_value):
+    if isinstance(origianl_value, type(None)):
+        return replacement_value
+    return origianl_value
+
+def find_noned_labels(sample_group, self_labels=None, other_labels=None):
     if isinstance(self_labels, type(None)) or isinstance(self_labels, type(None)):
         all_labels = get_labels(sample_group)
         L1 = all_labels["L1"]
         L2 = all_labels["L2"]
-    if isinstance(self_labels, type(None)):
-        self_labels = L1
-    if isinstance(self_labels, type(None)):
-        other_labels = L2
-    if isinstance(relational_feature, type(None)):
+        self_labels = replace_if_none(self_labels, L1)
+        other_labels = replace_if_none(other_labels, L2)
+    return self_labels, other_labels
+            
+def find_noned_features(sample_group, self_features=None, other_features=None, general_features=None):
+    if isinstance(self_features, type(None)) or isinstance(other_features, type(None)) or isinstance(general_features, type(None)):
         all_feature_names = get_feature_names(sample_group)
         F1 = sorted(list(all_feature_names["F1"]))
         F2 = sorted(list(all_feature_names["F2"]))
-        if feature_name in F1 and feature_name in F2:
-            print("Feature could be relational or individual, assuming individual.")
-            relational_feature = False
-        elif feature_name in F1:
-            relational_feature = False
-        elif feature_name in F2:
-            relational_feature = True
-        else:
-            print("Feature not found, stopping...")
-            return None, None, None
+        FG = sorted(list(all_feature_names["FG"]))
+        self_features = replace_if_none(self_features, F1)
+        other_features = replace_if_none(other_features, F2)
+        general_features = replace_if_none(general_features, FG)
+    return self_features, other_features, general_features           
+
+def find_labels_and_features(sample_group, self_labels=None, other_labels=None, self_features=None, other_features=None, general_features=None):
+    self_labels, other_labels = find_noned_labels(sample_group, self_labels=self_labels, other_labels=other_labels)
+    self_features, other_features, general_features = find_noned_features(sample_group, self_features=self_features, other_features=other_features, general_features=general_features)
+    return self_labels, other_labels, self_features, other_features, general_features
+
+def find_sample_size_and_feature_type(sample_group, feature_name, self_features=None, other_features=None, general_features=None, sample_size=None, feature_type=None):
+    self_features, other_features, general_features = find_noned_features(sample_group, self_features=self_features, other_features=other_features)
+    if isinstance(sample_size, type(None)):
+        sample_size = get_feature_sizes(sample_group, feature_name).most_common(1)[0][0]
+    if isinstance(feature_type, type(None)):
+        feature_type = find_feature_type(self_features, other_features, general_features, feature_name)
+    return sample_size, feature_type
+
+#TODO: add support for per-session-features (no self_labels or other_labels)
+def get_data_matrix(sample_group, feature_name, self_labels=None, other_labels=None, collapse=False, sample_size=None, feature_type=None, self_features=None, other_features=None, general_features=None):
+    self_labels, other_labels = find_noned_labels(sample_group, self_labels=self_labels, other_labels=other_labels)
+    self_features, other_features, general_features = find_noned_features(sample_group, self_features=self_features, other_features=other_features, general_features=general_features)
+    sample_size, feature_type = find_sample_size_and_feature_type(sample_group, feature_name, self_features=self_features, other_features=other_features, general_features=general_features)
     
-    if relational_feature:
+    if feature_type == "individual" or feature_type == "general":
         other_labels = None
+    if feature_type == "relational" or feature_type == "general":
+        self_labels = None
     
-    session_samples = gather_session_samples(sample_group, feature_name, self_labels=self_labels, other_labels=other_labels, sample_size=size_mode)
-    if collapse:
-        speaker_samples = collapse_sessions_to_speakers(session_samples)
-        M, ML1, ML2 = map_samples_to_common_matrix(speaker_samples, sample_size=size_mode)
-    else:
-        M, ML1, ML2 = map_samples_to_common_matrix(session_samples, sample_size=size_mode)
-    return M, ML1, ML2
+    if isinstance(feature_type, type(None)):
+        return None, None, None, None
+    
+    samples = gather_session_samples(sample_group, feature_name, self_labels=self_labels, other_labels=other_labels, sample_size=sample_size)
+    if collapse: samples = collapse_sessions_to_speakers(samples)
+    M, ML0, ML1, ML2 = map_samples_to_common_matrix(samples, sample_size=sample_size)
+    return M, ML0, ML1, ML2
