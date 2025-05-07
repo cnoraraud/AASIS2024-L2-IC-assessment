@@ -1,5 +1,7 @@
 import numpy as np
 
+SPEAKER_SELF = "self"
+SPEAKER_OTHER = "other"
 SPEAKER1 = "S001"
 SPEAKER2 = "S002"
 SPEAKERS = "[all]"

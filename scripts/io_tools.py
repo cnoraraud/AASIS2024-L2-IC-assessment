@@ -91,6 +91,9 @@ def special_data_path():
 def figs_path():
     return private_data_path("figs")
 
+def output_csvs_path():
+    return private_data_path("output_csvs")
+
 def manifests_path():
     return private_data_path("manifests")
 

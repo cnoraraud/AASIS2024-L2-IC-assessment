@@ -75,7 +75,7 @@ def get_grouping_columns():
         "2nd Language Count", "Language Count",
         "Interlocutor First Language Familiarity",
         "Gender Match","Speaking Difference",
-        "Interaction Difference"
+        "Interaction Difference", "Score"
     ]
     return grouping_columns
 
@@ -140,6 +140,14 @@ def add_partner_id(speakers, samples):
             other_id = round(speaker_map[speaker_id])
         other_speakers.append(other_id)
     speakers["OtherSpeakerID"] = other_speakers
+
+def add_score(speakers):
+    score_map = {"A1": 0, "A2": 1, "B1": 2, "B2": 3, "C1": 4, "C2": 5}
+    group_map = {True: "Top Half", False: "Bottom Half"}
+    score = (speakers["Speaking"].map(score_map) + speakers["Interaction"].map(score_map)) / 2
+    score = score >= 2
+    score = score.map(group_map)
+    speakers["Score"] = score
 
 def get_languages(ls):
     if not isinstance(ls,str):

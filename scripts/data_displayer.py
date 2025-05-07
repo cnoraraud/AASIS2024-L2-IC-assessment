@@ -62,7 +62,7 @@ def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, re
         safe_title = nt.sanitize_filename(title)
         savepath = iot.figs_path() / f"{safe_title}.png"
         if overwrite or not savepath.exists():
-            plt.savefig()
+            plt.savefig(savepath, dpi=300, bbox_inches="tight")
             plt.clf()
             plt.close()
     else:
@@ -117,24 +117,42 @@ def cc(data, labels, title, reorder=True, rescale_rows=True, max_t=None, style="
             safe_title = nt.sanitize_filename(title)
             savepath = iot.figs_path() / f"{safe_title}.png"
             if overwrite or not savepath.exists():
-                plt.savefig()
+                plt.savefig(savepath, dpi=300, bbox_inches="tight")
                 plt.clf()
                 plt.close()
         else:
             plt.show()
 
-def r(data, labels, title, colorbar=False, vmin=None, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True, savefig=False, overwrite=True):
+def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15, height=15, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True, savefig=False, overwrite=True, automate_colorscale=True):
     individual = fig == None or ax == None
     if individual:
         fig, (ax) = plt.subplots(1, 1)
-        fig.set_figwidth(15)
-        fig.set_figheight(15)
-    cax = ax.imshow(data, cmap="PiYG_r", aspect='auto', interpolation='none', vmin=vmin, vmax=vmax)
+        fig.set_figwidth(width)
+        fig.set_figheight(height)
+    if isinstance(labels_top, type(None)):
+        labels_top = labels
+    symmetric = False
+    if automate_colorscale:
+        new_data = np.array(data)
+        new_data[abs(data - np.nanmedian(data)) > 3 * np.std(data)] = np.nan
+        centre = np.nanmedian(new_data)
+        mag = np.nanmedian(np.abs(new_data - centre)) * 3
+        top = np.nanmax(data)
+        bot = np.nanmin(data)
+        if isinstance(vmin, type(None)):
+            vmin = max(centre - mag, bot)
+        if isinstance(vmax, type(None)):
+            vmax = min(centre + mag, top)
+        symmetric = centre / mag < 0.2
+    cmap = "plasma"
+    if symmetric:
+        cmap = "berlin"
+    cax = ax.imshow(data, cmap=cmap, aspect='equal', interpolation='none', vmin=vmin, vmax=vmax)
     if colorbar: fig.colorbar(cax)
     ax.tick_params(top=False, labeltop=labeltop, bottom=False, labelbottom=False, left=False, labelleft=labelleft, right=False, labelright=False)
-    ax.set_xticks(np.arange(len(labels)))
+    ax.set_xticks(np.arange(len(labels_top)))
     ax.set_yticks(np.arange(len(labels)))
-    ax.set_xticklabels(labels, rotation=90, ha='left')
+    ax.set_xticklabels(labels_top, rotation=90, ha='left')
     ax.set_yticklabels(labels)
     ax.set_title(title)
     if individual:
@@ -142,7 +160,7 @@ def r(data, labels, title, colorbar=False, vmin=None, vmax=None, fig = None, ax 
             safe_title = nt.sanitize_filename(title)
             savepath = iot.figs_path() / f"{safe_title}.png"
             if overwrite or not savepath.exists():
-                plt.savefig()
+                plt.savefig(savepath, dpi=300, bbox_inches="tight")
                 plt.clf()
                 plt.close()
         else:
@@ -272,7 +290,7 @@ def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scal
         safe_title = nt.sanitize_filename(f"{plot_name}_{task_name}_{feature_name}")
         savepath = iot.figs_path() / f"{safe_title}.png"
         if overwrite or not savepath.exists():
-            plt.savefig()
+            plt.savefig(savepath, dpi=300, bbox_inches="tight")
             plt.clf()
             plt.close()
     else:

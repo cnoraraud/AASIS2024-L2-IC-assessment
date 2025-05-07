@@ -1,5 +1,5 @@
-version: "0.1.5"
-date: "2025/03/18"
+version: "0.1.6"
+date: "2025/04/09"
 paths:
   main_data:
     .: "<root dir>"
@@ -20,5 +20,6 @@ paths:
     pyfeat_csvs: "<sub dir>"
     joystick_csvs: "<sub dir>"
     figs: "<sub dir>"
+    output_csvs: '<sub dir>'
     special_data: "<sub dir>"
     manifests: "<sub dir>"

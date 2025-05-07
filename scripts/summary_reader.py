@@ -491,26 +491,35 @@ def gather_session_samples(summaries, feature_name, self_labels=None, other_labe
     
     return session_samples
 
-def seperate_speaker_from_session(speaker, sample, self_labels, other_labels):
-    
+
+def seperate_speaker_from_session(speaker, sample, self_labels, other_labels, collapse=False):
+    other_speaker = npw.get_speaker_other(speaker)
+
     if not isinstance(self_labels, type(None)):
-        self_mask = npzr.has(self_labels, speaker)
-        new_sample = sample[self_mask]
-        new_self_labels = npzr.replace_labels(npw.string_array(self_labels), speaker, "own")[self_mask]
+        new_self_labels = npw.string_array(self_labels)
+        new_self_labels = npzr.replace_labels(new_self_labels, speaker, npw.SPEAKER_SELF)
+        new_self_labels = npzr.replace_labels(new_self_labels, other_speaker, npw.SPEAKER_OTHER)
     else:
-        new_sample = sample
         new_self_labels = self_labels
     
     if not isinstance(other_labels, type(None)):
-        new_other_labels = npzr.replace_labels(other_labels, speaker, "own")
-        new_other_labels = npzr.replace_labels(npw.string_array(new_other_labels), npw.get_speaker_other(speaker), "other")
+        new_other_labels = npw.string_array(other_labels)
+        new_other_labels = npzr.replace_labels(new_other_labels, speaker, npw.SPEAKER_OTHER)
+        new_other_labels = npzr.replace_labels(new_other_labels, other_speaker, npw.SPEAKER_SELF)
     else:
         new_other_labels = other_labels
     
+    if collapse:
+        self_mask = npzr.has(self_labels, speaker)
+        new_sample = sample[self_mask]
+        new_self_labels = new_self_labels[self_mask]
+    else:
+        new_sample = sample
+
     return new_sample, new_self_labels, new_other_labels
 
 # Implicitly cuts out shared left labels
-def collapse_sessions_to_speakers(session_samples):
+def sessions_to_speakers(session_samples, collapse=False):
     speaker_samples = dict()
 
     for sample_key in session_samples:
@@ -521,7 +530,7 @@ def collapse_sessions_to_speakers(session_samples):
         other_labels = session_sample["other_labels"]
         for speaker in npw.get_speakers():
             new_npy = f"{npy}_{speaker}"
-            new_sample, new_self_labels, new_other_labels = seperate_speaker_from_session(speaker, sample, self_labels, other_labels)
+            new_sample, new_self_labels, new_other_labels = seperate_speaker_from_session(speaker, sample, self_labels, other_labels, collapse=collapse)
             speaker_samples[new_npy] = {"npy": new_npy, "sample": new_sample, "self_labels": new_self_labels, "other_labels": new_other_labels}
     return speaker_samples
         
@@ -556,6 +565,7 @@ def map_samples_to_common_matrix(all_samples, all_self_labels=None, all_others_l
         all_self_labels = sorted(list(all_self_labels))
     if find_others_labels:
         all_others_labels = sorted(list(all_others_labels))
+    
     all_self_labels = npw.string_array(all_self_labels)
     all_others_labels = npw.string_array(all_others_labels)
     all_session_labels = npw.string_array(all_session_labels)
@@ -574,8 +584,9 @@ def map_samples_to_common_matrix(all_samples, all_self_labels=None, all_others_l
         if not isinstance(sample["other_labels"], type(None)):
             other_labels = sample["other_labels"]
         
-        self_indecies = np.array(np.where(np.isin(all_self_labels, self_labels))[0])
-        other_indecies = np.array(np.where(np.isin(all_others_labels, other_labels))[0])
+        self_indecies = np.array([np.where(all_self_labels == label)[0][0] for label in self_labels])
+        other_indecies = np.array([np.where(all_others_labels == label)[0][0] for label in other_labels])
+
         sample_matrix = np.full(shape=sample_shape,fill_value=sanitize_value)
         
         sample_value = sample["sample"]
@@ -649,13 +660,13 @@ def get_data_matrix(sample_group, feature_name, self_labels=None, other_labels=N
     
     if feature_type == "individual" or feature_type == "general":
         other_labels = None
-    if feature_type == "relational" or feature_type == "general":
+    if feature_type == "general":
         self_labels = None
     
     if isinstance(feature_type, type(None)):
         return None, None, None, None
     
     samples = gather_session_samples(sample_group, feature_name, self_labels=self_labels, other_labels=other_labels, sample_size=sample_size)
-    if collapse: samples = collapse_sessions_to_speakers(samples)
+    samples = sessions_to_speakers(samples, collapse=collapse)
     M, ML0, ML1, ML2 = map_samples_to_common_matrix(samples, sample_size=sample_size)
     return M, ML0, ML1, ML2
