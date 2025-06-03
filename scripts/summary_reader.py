@@ -504,8 +504,8 @@ def seperate_speaker_from_session(speaker, sample, self_labels, other_labels, co
     
     if not isinstance(other_labels, type(None)):
         new_other_labels = npw.string_array(other_labels)
-        new_other_labels = npzr.replace_labels(new_other_labels, speaker, npw.SPEAKER_OTHER)
-        new_other_labels = npzr.replace_labels(new_other_labels, other_speaker, npw.SPEAKER_SELF)
+        new_other_labels = npzr.replace_labels(new_other_labels, speaker, npw.SPEAKER_SELF)
+        new_other_labels = npzr.replace_labels(new_other_labels, other_speaker, npw.SPEAKER_OTHER)
     else:
         new_other_labels = other_labels
     

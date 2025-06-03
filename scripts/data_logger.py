@@ -32,6 +32,10 @@ def twrite(manifest, log_string, l=1):
 def open_manifest(manifest_type):
     return open(iot.manifests_path() / f"{manifest_type}_manifest.txt", "a")
 
+COPY_TYPE = "copy"
+DATA_TYPE = "data_matrix"
+SUMMARY_TYPE = "summary"
+
 def write_to_manifest_new_file(manifest_type, old_path, new_path, input_info = None, output_info = None):
     old_metadata = iot.read_metadata_from_path(old_path)
     new_metadata = iot.read_metadata_from_path(new_path)

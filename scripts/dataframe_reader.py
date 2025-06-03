@@ -75,7 +75,8 @@ def get_grouping_columns():
         "2nd Language Count", "Language Count",
         "Interlocutor First Language Familiarity",
         "Gender Match","Speaking Difference",
-        "Interaction Difference", "Score"
+        "Interaction Difference", "Score", "Score2",
+        "Combined IC CEFR"
     ]
     return grouping_columns
 
@@ -141,13 +142,55 @@ def add_partner_id(speakers, samples):
         other_speakers.append(other_id)
     speakers["OtherSpeakerID"] = other_speakers
 
-def add_score(speakers):
-    score_map = {"A1": 0, "A2": 1, "B1": 2, "B2": 3, "C1": 4, "C2": 5}
+def num_to_cefr(series):
+    group_map = {0: "A1", 1: "A2", 2: "B1", 3: "B2", 4: "C1", 5: "C2"}
+    return series.round(0).astype('Int64').map(group_map)
+
+def cefr_to_num(series):
+    group_map = {"A1": 0, "A2": 1, "B1": 2, "B2": 3, "C1": 4, "C2": 5}
+    return series.map(group_map).round(0).astype('Int64')
+
+def add_ic_score(speakers):
     group_map = {True: "Top Half", False: "Bottom Half"}
-    score = (speakers["Speaking"].map(score_map) + speakers["Interaction"].map(score_map)) / 2
-    score = score >= 2
-    score = score.map(group_map)
-    speakers["Score"] = score
+    score = (cefr_to_num(speakers["Speaking"]) + cefr_to_num(speakers["Interaction"])) / 2.0
+    speakers["self_ic_calc"] = score
+    score_group = speakers["self_ic_calc"] >= speakers["self_ic_calc"].median()
+    score_group = score_group.map(group_map)
+    speakers["Score"] = score_group
+
+def add_combined_ic_cefr(speakers):
+    cefr_group = num_to_cefr(speakers["combined_calc"])
+    speakers["Combined IC CEFR"] = cefr_group
+
+def add_combined_score(speakers):
+    group_map = {True: "Top Half", False: "Bottom Half"}
+    score = speakers[["non_verbal_calc", "construct_calc", "self_ic_calc"]].mean(axis=1)
+    speakers["combined_calc"] = score
+    score_group = speakers["combined_calc"] >= speakers["combined_calc"].median()
+    score_group = score_group.map(group_map)
+    speakers["Score2"] = score_group
+
+def get_score_corrs(speakers):
+    cols = speakers.columns
+    score_cols = ["non_verbal_calc", "self_ic_calc", "construct_calc"]
+    scores = []
+    for score_col in score_cols:
+        if score_col in cols:
+            scores.append(speakers[score_col])
+    non_nans = np.full(len(speakers), True)
+    series = []
+    for score in scores:
+        non_nans = non_nans & (~np.isnan(score))
+    for score in scores:
+        series.append(score[non_nans])
+    corrs = np.corrcoef(np.array(series))
+    return corrs, score_cols
+
+def get_score_mismatch(speakers):
+    n_start = len(speakers)
+    mismatched_speakers = speakers[~(((speakers["Score"] == "Top Half") & (speakers["Score2"] == "Top Half")) | ((speakers["Score"] == "Bottom Half") & (speakers["Score2"] == "Bottom Half")))]
+    n_end = len(mismatched_speakers)
+    return n_end / n_start, mismatched_speakers
 
 def get_languages(ls):
     if not isinstance(ls,str):
@@ -184,12 +227,22 @@ def add_partner_relation(speakers):
     speakers["Interaction Difference"] = speaking_match
 
 def plot_column_groups(df, columns, cols = 5):
-    items = len(columns)
+    columns_copy = columns.copy()
+    columns_not_found = []
+    for column in columns_copy:
+        if column not in df.columns:
+            columns_not_found.append(column)
+    if len(columns_not_found) > 0:
+        print(f"Columns not found: {len(columns_not_found)}")
+    for column in columns_not_found:
+        columns_copy.remove(column)
+        print(f"\t{column}")
+    items = len(columns_copy)
     cols = 5
     rows = math.ceil(items/cols)
     plt.figure(figsize=(15,3*rows))
     plt.tight_layout()
-    for i, col in enumerate(columns):
+    for i, col in enumerate(columns_copy):
         keyword = col
         plt.subplot(rows, cols, i+1)
         keys = sorted(list(df[keyword].value_counts().keys()))
@@ -206,3 +259,41 @@ def merge_all(speakers, samples):
     sessions_concat = sessions_concat.reset_index()
     merged_table = speakers.merge(sessions_concat,how="outer",left_on="SpeakerID",right_on="SpeakerID")
     return merged_table
+
+def find_fair_ratings(df, label, new_label):
+    df = df.drop(index = df[df["rater"] == "R_19_old"].index)
+    df[df == "R_19_new"] = "R_19"
+    df = df.reset_index()
+    
+    mean_score = dict()
+    std_score = dict()
+    
+    for rater in df.rater.value_counts().index.to_list():
+        m = df[df["rater"] == rater][label].mean()
+        std = df[df["rater"] == rater][label].std()
+        mean_score[rater] = m
+        std_score[rater] = std
+    mean_m = np.array(list(mean_score.values())).mean()
+    mean_std = np.array(list(std_score.values())).mean()
+
+    df_normed = df.copy()
+
+    for rater in df_normed.rater.value_counts().index.to_list():
+        m = mean_score[rater]
+        std = std_score[rater]
+        df_normed.loc[df_normed["rater"] == rater, label] = ((df_normed[df_normed["rater"] == rater][label] - m + mean_m)/std) * mean_std
+
+    mean_normed_m = df_normed[label].mean()
+
+    speaker_scores = dict()
+    for speaker in df_normed.speaker.value_counts().index.to_list():
+        m = df_normed[df_normed["speaker"] == speaker][label].mean() - mean_normed_m + 0.5
+        score = 5*m
+        speaker_scores[int(speaker)] = score
+
+    scores = pd.DataFrame(list(speaker_scores.values()), index=list(speaker_scores.keys()))
+    scores.columns = [new_label]
+    return scores
+
+def combine_ratings(speakers, non_verbal_calc, construct_calc):
+    return speakers.merge(non_verbal_calc, how="left", left_index=True, right_index=True).merge(construct_calc, how="left", left_index=True, right_index=True)

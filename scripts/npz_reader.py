@@ -183,7 +183,7 @@ def write_DL(name, D, L, write_to_manifest=True, overwrite=True):
     input_info = eafr.eaf_info(eaf_path)
     output_info = DL_info(D, L)
     if write_to_manifest:
-        return npz_path, [dl.write_to_manifest_new_file("data_matrix", eaf_path, npz_path, input_info=input_info, output_info=output_info)]
+        return npz_path, [dl.write_to_manifest_new_file(dl.DATA_TYPE, eaf_path, npz_path, input_info=input_info, output_info=output_info)]
     else:
         return npz_path, [None]
 

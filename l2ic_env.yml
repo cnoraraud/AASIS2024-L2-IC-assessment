@@ -1,7 +1,12 @@
 name: l2ic
 channels:
+  - nvidia
   - conda-forge
 dependencies:
+  - python>=3.12,<3.13
+  - pytorch-gpu>=2.6,<2.7
+  - torchvision
+  - torchaudio
   - numpy
   - pandas
   - matplotlib
@@ -12,3 +17,5 @@ dependencies:
   - pip:
     - pympi-ling
     - ipykernel
+    - torcheval
+    - scikit-learn

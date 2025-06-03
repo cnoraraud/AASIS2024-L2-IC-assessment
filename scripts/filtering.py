@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.interpolate import interp1d
+from scipy.stats import mode
 import analysis as ana
 
 def ma(data, properties={}):
@@ -20,6 +21,11 @@ def to_01(data, properties={}):
     pos_data = data - np.nanmin(data, axis=axis, keepdims=True)
     data_s = np.nanmax(pos_data, axis=axis, keepdims=True)
     return pos_data / data_s
+def to_0_mode(data, properties={}):
+    axis = -1
+    if "axis" in properties:
+        axis = properties["axis"]
+    return data - mode(data, axis=axis, keepdims=True)
 
 def norm(data, properties={}):
     axis = -1
@@ -29,10 +35,19 @@ def norm(data, properties={}):
     data_s = np.nanmax(np.abs(data_c), axis=axis, keepdims=True)
     return data_c / data_s
 
+def zero_mean(data, properties={}):
+    axis = -1
+    if "axis" in properties:
+        axis = properties["axis"]
+    return data - np.nanmean(data, axis=axis, keepdims=True)
+
 def flatten(data, properties = {}):
     threshold = np.finfo(np.float64).eps
     if "threshold" in properties:
         threshold = properties["threshold"]
+    do_std = False
+    if "do_std" in properties:
+        do_std = properties["do_std"]
     reverse = False
     if "reverse" in properties:
         reverse = properties["reverse"]
@@ -46,6 +61,8 @@ def flatten(data, properties = {}):
         neg_val = 1
     if side == "asym":
         neg_val = -1
+    if do_std:
+        threshold = threshold * np.nanstd(data)
     flattened_data = np.zeros_like(data)
     if do_pos and reverse: flattened_data[(data >= 0) & (data <= threshold)] = 1
     if do_neg and reverse: flattened_data[(data < 0) & (data >= -threshold)] = neg_val

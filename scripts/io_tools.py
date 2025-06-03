@@ -59,6 +59,9 @@ def aasis_pyfeat_csvs_path():
 def aasis_joystick_csvs_path():
     return aasis_data_path("joystick_csvs")
 
+def aasis_ratings_csvs_path():
+    return aasis_data_path("ratings_csvs")
+
 def wavs_path(sr = None):
     if isinstance(sr, type(None)):
         return private_data_path("wavs")
@@ -78,6 +81,9 @@ def pyfeat_csvs_path():
 
 def joystick_csvs_path():
     return private_data_path("joystick_csvs")
+
+def ratings_csvs_path():
+    return private_data_path("ratings_csvs")
 
 def npzs_path():
     return private_data_path("npzs")
@@ -290,6 +296,12 @@ def create_missing_folder(tgt):
     os.mkdir(tgt)
     return True
 
+def create_missing_folder_recursive(tgt):
+    if p.Path(tgt).exists():
+        return False
+    os.makekdirs(tgt)
+    return True
+
 def copy_missing(src, tgt, overwrite=False):
     if p.Path(tgt).exists() and not overwrite:
         return False
@@ -325,6 +337,13 @@ def source_annotated_data_fuzzy(overwrite=False):
             print(traceback.format_exc())
             manifest.error(e)
     manifest.end()
+
+def source_aasis_ratings(overwrite=True):
+    ratings_csv_list = sorted(aasis_ratings_csvs_path().glob(f'**/*.csv'))
+    for file_path in ratings_csv_list:
+        new_path = ratings_csvs_path() / file_path.name
+        if copy_missing(file_path, new_path, overwrite=overwrite):
+            dl.write_to_manifest_new_file(dl.COPY_TYPE, file_path, new_path)
 
 def any_in(search_string, sub_strings):
     for sub_string in sub_strings:

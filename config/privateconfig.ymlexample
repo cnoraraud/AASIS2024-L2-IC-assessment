@@ -7,8 +7,9 @@ paths:
     eafs: "<sub dir>"
     csvs: "<sub dir>"
     mp4s: "<sub dir>"
-    pyfeat_csvs: '<sub dir>'
-    joystick_csvs: '<sub dir>'
+    pyfeat_csvs: "<sub dir>"
+    joystick_csvs: "<sub dir>"
+    ratings_csvs: "<sub dir>"
   personal_data:
     .: "<root dir>"
     wavs: "<sub dir>"
@@ -17,9 +18,10 @@ paths:
     npys: "<sub dir>"
     csvs: "<sub dir>"
     mp4s: "<sub dir>"
+    figs: "<sub dir>"
     pyfeat_csvs: "<sub dir>"
     joystick_csvs: "<sub dir>"
-    figs: "<sub dir>"
-    output_csvs: '<sub dir>'
+    ratings_csvs: "<sub dir>"
+    output_csvs: "<sub dir>"
     special_data: "<sub dir>"
     manifests: "<sub dir>"

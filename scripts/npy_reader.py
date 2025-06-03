@@ -27,7 +27,7 @@ def write_summary(name, summary):
     input_info, output_info = get_summary_info_io(summary)
     np.save(str(npy_path), summary)
     del summary
-    return [dl.write_to_manifest_new_file("summary", npz_path, npy_path, input_info=input_info, output_info=output_info)]
+    return [dl.write_to_manifest_new_file(dl.SUMMARY_TYPE, npz_path, npy_path, input_info=input_info, output_info=output_info)]
         
 def summarize_data(name, D, L, overwrite=False):
     if not overwrite:

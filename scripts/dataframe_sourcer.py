@@ -4,6 +4,7 @@ import io_tools as iot
 import naming_tools as nt
 import npz_reader as npzr
 import npy_reader as npyr
+import dataframe_reader as dfr
 
 def clean_no_permissions(df):
     new_df = df
@@ -92,3 +93,42 @@ def get_speaker_dataframe():
     new_ratings.columns = cols
 
     return unis.merge(speaker_info, on="SpeakerID", how="outer").merge(new_ratings, on="SpeakerID", how="outer")
+
+def get_cefr_ratings_dataframe():
+    cefr = pd.read_csv(iot.ratings_csvs_path() / 'cefr_ratings.csv')
+    cefr[cefr == -9999] = np.nan
+    cefr[cefr == 9999] = np.nan
+    cefr["construct_score"] = (cefr[["holistic", "fluency", "turn_taking"]].mean(axis=1) - 1)/5
+    return cefr
+
+def get_nonverbal_ratings_dataframe():
+    non_verb = pd.read_csv(iot.ratings_csvs_path() / 'non_verbal_ratings.csv')
+    non_verb[non_verb == 9999] = np.nan
+    non_verb[non_verb == 100] = np.nan
+    non_verb["if_contributed"] = (non_verb["if_contributed"] + 1) / 2
+    non_verb["IC_score"] = non_verb[["face", "eye_contact", "head", "vocalizing", "hands", "if_contributed"]].mean(axis=1)
+    return non_verb
+
+def get_overall_ratings_dataframe():
+    return pd.read_csv(iot.ratings_csvs_path() / 'overall_ratings.csv')
+
+def get_speakers_full_dataframe():
+    speakers = get_clean_speaker_dataframe()
+    samples = get_sample_dataframe()
+    non_verb = get_nonverbal_ratings_dataframe()
+    cefr = get_cefr_ratings_dataframe()
+
+    dfr.add_partner_id(speakers, samples)
+    dfr.add_language_counts(speakers)
+    dfr.add_language_difference(speakers)
+    dfr.add_partner_relation(speakers)
+    dfr.add_ic_score(speakers)
+
+    non_verbal_calc = dfr.find_fair_ratings(non_verb, "IC_score", "non_verbal_calc")
+    construct_calc = dfr.find_fair_ratings(cefr, "construct_score", "construct_calc")
+
+    speakers = dfr.combine_ratings(speakers, non_verbal_calc, construct_calc)
+    dfr.add_combined_score(speakers)
+    dfr.add_combined_ic_cefr(speakers)
+
+    return speakers

@@ -24,12 +24,24 @@ def sanitize_labels(labels, tag=""):
         sanitized_labels[i] = f"{sanitized_number}{tagspace}{sanitized_label}"
     return sanitized_labels
 
-def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False, savefig=False, overwrite=True):
+def save_figure(title, subfolder=None, overwrite=True):
+    safe_title = nt.sanitize_filename(title)
+    savepath = iot.figs_path()
+    if not isinstance(subfolder, type(None)):
+        savepath = iot.figs_path() / f"{subfolder}"
+    iot.create_missing_folder(savepath)
+    fullsavepath = savepath / f"{safe_title}.png"
+    if overwrite or not fullsavepath.exists():
+        plt.savefig(fullsavepath, dpi=300, bbox_inches="tight")
+        plt.clf()
+        plt.close()
+
+def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, zero_mode=False, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False, savefig=False, overwrite=True, subfolder=None):
     labels = npzr.anonymize_speakers(labels)
     relationship_filter = npzr.has(labels, nt.ANNOTATION_TAG) & ~npzr.has(labels, npw.SPEAKERS)
     S1_filter = npzr.has(labels, npw.SPEAKER1) & relationship_filter
     S2_filter = npzr.has(labels, npw.SPEAKER2) & relationship_filter
-    D1, L1 = npzr.do_label_select(data, labels, S1_filter)
+    D1, L1  = npzr.do_label_select(data, labels, S1_filter)
     D2, L2 = npzr.do_label_select(data, labels, S2_filter)
     L1 = npzr.strip_label_slots(L1)
     L2 = npzr.strip_label_slots(L2)
@@ -56,19 +68,14 @@ def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, re
         D1_common, L_common = npzr.reorder_data(D1_common, L_common)
         D2_common, L_common = npzr.reorder_data(D2_common, L_common)
 
-    cc(D1_common, L_common, npw.SPEAKER1, fig=fig, ax=ax1, reorder=False, rescale_rows=rescale_rows, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
-    cc(D2_common, L_common, npw.SPEAKER2, fig=fig, ax=ax2, reorder=False, rescale_rows=rescale_rows, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
+    cc(D1_common, L_common, npw.SPEAKER1, fig=fig, ax=ax1, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
+    cc(D2_common, L_common, npw.SPEAKER2, fig=fig, ax=ax2, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
     if savefig:
-        safe_title = nt.sanitize_filename(title)
-        savepath = iot.figs_path() / f"{safe_title}.png"
-        if overwrite or not savepath.exists():
-            plt.savefig(savepath, dpi=300, bbox_inches="tight")
-            plt.clf()
-            plt.close()
+        save_figure(title, subfolder=subfolder, overwrite=overwrite)
     else:
         plt.show()
 
-def cc(data, labels, title, reorder=True, rescale_rows=True, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True):
+def cc(data, labels, title, reorder=True, rescale_rows=True, zero_mode=False, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True, subfolder=None):
     individual = fig == None or ax == None
     cmap = None
     if style == "discrete":
@@ -85,6 +92,11 @@ def cc(data, labels, title, reorder=True, rescale_rows=True, max_t=None, style="
         plot_data = filt.to_01(plot_data)
         vmin = 0
         vmax = 1
+    elif rescale_rows == "01_both":
+        plot_data[plot_data >= 0] = filt.to_01(np.abs(plot_data[plot_data >= 0]))
+        plot_data[plot_data < 0] = -filt.to_01(np.abs(plot_data[plot_data < 0]))
+        vmin = -1
+        vmax = 1
     elif rescale_rows == "asym":
         plot_data = filt.norm(plot_data)
         vmin = -1
@@ -96,6 +108,10 @@ def cc(data, labels, title, reorder=True, rescale_rows=True, max_t=None, style="
     else:
         vmin = np.nanmin(plot_data)
         vmax = np.nanmax(plot_data)
+    if zero_mode:
+        plot_data = filt.to_0_mode(plot_data)
+        vmin = np.nanmin(plot_data)
+        vmax = np.nanmax(plot_data)        
     if not isinstance(max_t, type(None)):
         plot_data = ana.apply_method_to_all_features(plot_data, filt.fit_to_size, {"t":max_t, "destructive":True})
     if reorder:
@@ -114,16 +130,11 @@ def cc(data, labels, title, reorder=True, rescale_rows=True, max_t=None, style="
         ax.set_yticks(np.arange(len(plot_labels)), labels = plot_labels)
     if individual:
         if savefig:
-            safe_title = nt.sanitize_filename(title)
-            savepath = iot.figs_path() / f"{safe_title}.png"
-            if overwrite or not savepath.exists():
-                plt.savefig(savepath, dpi=300, bbox_inches="tight")
-                plt.clf()
-                plt.close()
+            save_figure(title, subfolder=subfolder, overwrite=overwrite)
         else:
             plt.show()
 
-def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15, height=15, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True, savefig=False, overwrite=True, automate_colorscale=True):
+def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15, height=15, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True, savefig=False, overwrite=True, automate_colorscale=True, subfolder=None):
     individual = fig == None or ax == None
     if individual:
         fig, (ax) = plt.subplots(1, 1)
@@ -157,12 +168,7 @@ def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15,
     ax.set_title(title)
     if individual:
         if savefig:
-            safe_title = nt.sanitize_filename(title)
-            savepath = iot.figs_path() / f"{safe_title}.png"
-            if overwrite or not savepath.exists():
-                plt.savefig(savepath, dpi=300, bbox_inches="tight")
-                plt.clf()
-                plt.close()
+            save_figure(title, subfolder=subfolder, overwrite=overwrite)
         else:
             plt.show()
 
@@ -231,7 +237,7 @@ def get_axes(matrix, labels, feature_name, do_lines=True):
 
     return {"axes": axes, "N": len(axes), "sample_N": N, "t": t, "y_lim": (y_min, y_max), "feature_name": feature_name}
 
-def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scale=False, x_is_ratio=False, overwrite=True):
+def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scale=False, x_is_ratio=False, overwrite=True, subfolder=None):
     # Find x axis
     x = np.arange(plt_data["t"]) - 1
     if np.isscalar(mid_point):
@@ -287,12 +293,8 @@ def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scal
         plot_name = "mean-occurrence"
         if np.isscalar(mid_point):
             plot_name = "mean-occurence-turn-taking"
-        safe_title = nt.sanitize_filename(f"{plot_name}_{task_name}_{feature_name}")
-        savepath = iot.figs_path() / f"{safe_title}.png"
-        if overwrite or not savepath.exists():
-            plt.savefig(savepath, dpi=300, bbox_inches="tight")
-            plt.clf()
-            plt.close()
+        title = f"{plot_name}_{task_name}_{feature_name}"
+        save_figure(title, subfolder=subfolder, overwrite=overwrite)
     else:
         plt.show()
 
@@ -326,11 +328,11 @@ def get_plt_data_overall(task_name, feature_name):
 
 def produce_figures_turn_taking(task_name, feature_name, n = 5000, use_density = False):
     plt_data, mid_point = get_plt_data_turn_taking(task_name, feature_name, n = n, use_density = use_density)
-    plot_feature(plt_data, task_name, mid_point = mid_point, save_fig=True)
+    plot_feature(plt_data, task_name, mid_point = mid_point, save_fig=True, subfolder=f"turntaking\\{task_name}")
 
 def produce_figures_overall(task_name, feature_name):
     plt_data = get_plt_data_overall(task_name, feature_name)
-    plot_feature(plt_data, task_name, x_is_ratio=True, force_scale=True, save_fig=True)
+    plot_feature(plt_data, task_name, x_is_ratio=True, force_scale=True, save_fig=True, subfolder=f"overall\\{task_name}")
 
 def produce_all_figures_turn_taking():
     feature_names = npzr.get_all_features()

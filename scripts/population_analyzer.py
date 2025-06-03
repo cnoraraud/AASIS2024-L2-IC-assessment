@@ -1,5 +1,6 @@
 import summary_reader as sumr
 import numpy as np
+import numpy_wrapper as npw
 import pandas as pd
 from scipy import stats
 from collections import Counter
@@ -43,22 +44,81 @@ def get_medians(L1, L2, Ms, names, properties = {}):
         obj[name] = np.nanmedian(M, axis=0).flatten().tolist()
     return pd.DataFrame(obj)
 
+def create_statistics_dict(N1, N2):
+    obj = {"labels": [],
+        "statistic": [],
+        "p_value": [],
+        f"nobs {N1}": [],
+        f"nobs {N2}": [],
+        f"median {N1}": [],
+        f"median {N2}": [],
+        f"mean {N1}": [],
+        f"mean {N2}": [],
+        f"var {N1}": [],
+        f"var {N2}": [],
+        f"skew {N1}": [],
+        f"skew {N2}": [],
+        f"kurt {N1}": [],
+        f"kurt {N2}": [],
+        f"N-p {N1}": [],
+        f"N-p {N2}": []}
+    return obj
+
+def add_sample_comparison_to_statics_dict(obj, samples):
+    statistic = np.nan
+    p_value = np.nan
+
+    if npw.valid(samples[0], 4) and npw.valid(samples[1], 4):
+        statistic, p_value = stats.ttest_ind(samples[0], samples[1], equal_var=False)
+    obj["statistic"].append(statistic)
+    obj["p_value"].append(p_value)
+
+def add_sample_analysis_to_statistics_dict(obj, sample, N):
+    rng = np.random.default_rng()
+    nobs = np.nan
+    minmax = np.nan
+    mean = np.nan
+    var = np.nan
+    skew = np.nan
+    kurt = np.nan
+    gof_pvalue = np.nan
+    median = np.nan
+
+    if npw.valid(sample, 4) & npw.valid_dist(sample):
+        nobs, minmax, mean, var, skew, kurt = stats.describe(sample)
+        gof = stats.goodness_of_fit(stats.norm, sample, statistic='ad', rng=rng)
+        gof_pvalue = gof.pvalue
+        median = np.median(sample)
+
+    obj[f"nobs {N}"].append(nobs)
+    obj[f"median {N}"].append(median)
+    obj[f"mean {N}"].append(mean)
+    obj[f"var {N}"].append(var)
+    obj[f"skew {N}"].append(skew)
+    obj[f"kurt {N}"].append(kurt)
+    obj[f"N-p {N}"].append(gof_pvalue)
+    
+
 def get_ttest_for_binary(L1, L2, Ms, names, properties = {}):
-    obj = {"labels": [], "statistic": [], "p_value": []}
+    N1 = names[0]
+    N2 = names[1]
+    obj = create_statistics_dict(N1, N2)
     for row in range(len(L1)):
         samples = []
         for M in Ms:
             sample = M[:, row, 0]
             sample = sample[~np.isnan(sample)]
             samples.append(sample)
-        statistic, p_value = stats.ttest_ind(samples[0], samples[1], equal_var=False)
         obj["labels"].append(L1[row])
-        obj["statistic"].append(statistic)
-        obj["p_value"].append(p_value)
+        add_sample_comparison_to_statics_dict(obj, samples)
+        add_sample_analysis_to_statistics_dict(obj, samples[0], N1)
+        add_sample_analysis_to_statistics_dict(obj, samples[1], N2)
     return pd.DataFrame(obj)
 
 def get_ttest_for_binary_relational(L1, L2, Ms, names, properties = {}):
-    obj = {"labels": [], "statistic": [], "p_value": []}
+    N1 = names[0]
+    N2 = names[1]
+    obj = create_statistics_dict(N1, N2)
     for row in range(len(L1)):
         for col in range(len(L2)):
             samples = []
@@ -66,10 +126,10 @@ def get_ttest_for_binary_relational(L1, L2, Ms, names, properties = {}):
                 sample = M[:, row, col]
                 sample = sample[~np.isnan(sample)]
                 samples.append(sample)
-            statistic, p_value = stats.ttest_ind(samples[0], samples[1], equal_var=False)
-            obj["labels"].append(f"{L1[row]} + {L2[col]}")
-            obj["statistic"].append(statistic)
-            obj["p_value"].append(p_value)
+            obj["labels"].append(f"{L1[row] : L2[col]}")
+            add_sample_comparison_to_statics_dict(obj, samples)
+            add_sample_analysis_to_statistics_dict(obj, samples[0], N1)
+            add_sample_analysis_to_statistics_dict(obj, samples[1], N2)
     return pd.DataFrame(obj)
 
 def compare_groupings(results, method, properties = {}):
@@ -106,8 +166,13 @@ def ttest_self_features(res, collapse, self_labels, other_labels, self_features,
         normalize = feature_name in normalizable_features
         if normalize:
             feature_results = normalize_groupings(feature_results, performance_results)
+        keys = list(feature_results.keys())
+        split_name = "-".join(keys).lower()
+        savepath = iot.output_csvs_path() / f"{split_name}"
+        iot.create_missing_folder(savepath)
+
         ttest = compare_groupings(feature_results, get_ttest_for_binary)
-        ttest.dropna().sort_values("p_value").reset_index().drop(columns = ["index"]).to_csv(iot.output_csvs_path() / f"{feature_name}_welchs_ttest.csv", sep='\t')
+        ttest.dropna().sort_values("p_value").reset_index().drop(columns = ["index"]).to_csv(savepath / f"{feature_name}_welchs_ttest_{split_name}.csv", sep='\t')
 
 def ttest_relational_features(res, collapse, self_labels, other_labels, self_features, other_features, general_features, performance_results):
     feature_set = ['count_delay', 'count_overlap', 'mean_delay', 'mean_overlap', 'mean_segment_delay_count', 'mean_segment_overlap_count', 'mean_segment_overlap_ratio', 'median_delay', 'median_overlap', 'median_segment_delay_count', 'median_segment_overlap_count', 'median_segment_overlap_ratio', 'pearson_corr', 'spearman_corr', 'total_overlap']
@@ -118,11 +183,13 @@ def ttest_relational_features(res, collapse, self_labels, other_labels, self_fea
         if normalize:
             feature_results = normalize_groupings(feature_results, performance_results)
         keys = list(feature_results.keys())
+        split_name = "-".join(keys).lower()
+        savepath = iot.output_csvs_path() / f"{split_name}"
+        iot.create_missing_folder(savepath)
 
         # Produce Dataframes
         ttest = compare_groupings(feature_results, get_ttest_for_binary_relational)
-        split_name = "-".join(keys)
-        ttest.dropna().sort_values("p_value").reset_index().drop(columns = ["index"]).to_csv(iot.output_csvs_path() / f"{feature_name}_welchs_ttest_{split_name}.csv", sep='\t')
+        ttest.dropna().sort_values("p_value").reset_index().drop(columns = ["index"]).to_csv(savepath / f"{feature_name}_welchs_ttest_{split_name}.csv", sep='\t')
         try:
             # Produce Figures
             feature_results_1 = feature_results[keys[0]]
@@ -132,11 +199,13 @@ def ttest_relational_features(res, collapse, self_labels, other_labels, self_fea
             
             width = 20
             height = 20
+            collapse_string = ""
             if collapse:
                 height=10
-            dd.r(data1, f"Median {feature_name} with collapsed speakers for \'{keys[0]}\'", feature_results_1["self_labels"], feature_results_1["other_labels"], width=width, height=height, savefig=True, colorbar=True)
-            dd.r(data2, f"Median {feature_name} with collapsed speakers for \'{keys[1]}\'", feature_results_2["self_labels"], feature_results_2["other_labels"], width=width, height=height, savefig=True, colorbar=True)
-            dd.r(data2-data1, f"Median {feature_name} with collapsed speakers for difference between\'{keys[1]}\' and \'{keys[0]}\'", feature_results_2["self_labels"], feature_results_2["other_labels"], width=width, height=height, savefig=True, colorbar=True)
+                collapse_string = "with collapsed features for "
+            dd.r(data1, f"Median {feature_name} {collapse_string}\'{keys[0].lower()}\'", feature_results_1["self_labels"], feature_results_1["other_labels"], width=width, height=height, savefig=True, colorbar=True, subfolder=split_name)
+            dd.r(data2, f"Median {feature_name} {collapse_string}\'{keys[1].lower()}\'", feature_results_2["self_labels"], feature_results_2["other_labels"], width=width, height=height, savefig=True, colorbar=True, subfolder=split_name)
+            dd.r(data2-data1, f"Median {feature_name} {collapse_string}difference between\'{keys[1].lower()}\' and \'{keys[0].lower()}\'", feature_results_2["self_labels"], feature_results_2["other_labels"], width=width, height=height, savefig=True, colorbar=True, subfolder=split_name)
         except:
             print(f"Failed {feature_name}")
 
