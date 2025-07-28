@@ -29,7 +29,7 @@ def print_wav(wav):
     data = sig.wiener(data)
     plt.plot(data)
     plt.title(f"sr: {sr} sec: {data.shape[0]/sr} speakers: {speakers} mics: {mics}")
-    print(len(speakers))
+    dl.log(len(speakers))
     plt.show()
 
 def data_to_mfcc(data, window_n, hop_n, rate, first_cep = 1, num_ceps = 12):
@@ -66,7 +66,7 @@ def find_wavs_t_max(wavs):
         name = "unknown_name"
         if len(wavs) > 0:
             name = nt.file_swap(wavs[0]["wav_path"], all=False)
-        print(f"Invalid number of t_max proposals: {len(t_max_proposals)}\n\t{[t_max_proposals]}\n\t{name}")
+        dl.log(f"Invalid number of t_max proposals: {len(t_max_proposals)}\n\t{[t_max_proposals]}\n\t{name}")
     t_max = max(list(t_max_proposals))
     if t_max <= 0: t_max = None
     return t_max
@@ -230,7 +230,7 @@ def resample_wav(wav_name, sr):
     data1 = sig.resample(data0, t1) # design choice
     iot.create_wavs_sr_folder(sr)
     wavfile.write((iot.wavs_path(sr) / wav_name).as_posix(), sr1, data1)
-    print(f"Resampled from {t0} to {t1}")
+    dl.log(f"Resampled from {t0} to {t1}")
     return sr1, data1
 
 def read_wav(wav_path, sr):
@@ -256,8 +256,8 @@ def read_wavs(wav_paths, sr):
                     "wav_path": wav_path}
             wavs.append(wav)
         except Exception as e:
-            print(f"Could not read {wav_path} due to {e}")
-            print(traceback.format_exc())
+            dl.log(f"Could not read {wav_path} due to {e}")
+            dl.log(traceback.format_exc())
     return wavs
 
 def DB(data):

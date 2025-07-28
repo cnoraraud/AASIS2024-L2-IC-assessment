@@ -147,6 +147,27 @@ def speakers_to_sources(speakers):
         sources.extend(find_sources(speaker))
     return sources
 
+def task_names_no_prefix(tasks):
+    new_tasks = []
+    
+    for task in tasks:
+        new_task = task.lower()
+        new_task = new_task.replace("task","")
+        new_tasks.append(new_task)
+
+    return new_tasks
+
+def task_names_with_prefix(tasks):
+    new_tasks = []
+    
+    for task in tasks:
+        new_task = task.lower()
+        if "task" not in new_task:
+            new_task = f"task{new_task}"
+        new_tasks.append(new_task)
+
+    return new_tasks
+
 def get_anon_source(source):
     if source == npw.SPEAKERS:
         return source
@@ -205,4 +226,5 @@ def sanitize_filename(filename):
     filename = filename.replace("\\","_")
     filename = filename.replace("<","(")
     filename = filename.replace(">",")")
+    filename = filename.replace("&","and")
     return filename

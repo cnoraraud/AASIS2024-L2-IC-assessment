@@ -5,6 +5,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import numpy as np
 import numpy_wrapper as npw
+import data_logger as dl
 
 def get_speaker_groups(speakers, columns):
     if isinstance(columns, str):
@@ -35,12 +36,13 @@ def get_speaker_groups(speakers, columns):
         else:
             nonexistants.append(name)
             nonexistant +=1
-    print(f"Out of {existant + nonexistant} groupings {existant} existed and {nonexistant} didn't.")
+    dl.log(f"Out of {existant + nonexistant} groupings {existant} existed and {nonexistant} didn't.")
     if nonexistant > 0:
-        print(f"The groups that didn't exist were: \n\t{",".join(nonexistants)}")
+        dl.log(f"The groups that didn't exist were: \n\t{",".join(nonexistants)}")
     return groups
 
-def find_sample_groupins(groups, samples):
+# key method breaks without suffixes
+def find_sample_groupings(groups, samples):
     samples_obj = dict()
     for group_key in groups:
         ids = groups[group_key]
@@ -50,19 +52,29 @@ def find_sample_groupins(groups, samples):
             speaker_samples_obj = {}
             for i, speaker_sample in speaker_samples.iterrows():
                 S = None
+                suffix = ""
                 if speaker_sample["speaker_1"] == speaker:
                     S = npw.SPEAKER1
+                    suffix = "_1"
                 if speaker_sample["speaker_2"] == speaker:
                     S = npw.SPEAKER2
+                    suffix = "_2"
+                ratings_obj = {}
+                for rating_key, rating_value in speaker_sample.items():
+                    if suffix in rating_key:
+                        ratings_obj[rating_key.replace(suffix,"")] = rating_value
                 speaker_samples_obj = {
                     "speaker": speaker,
                     "S": S,
                     "npz": speaker_sample["npz"],
                     "npy": speaker_sample["npy"],
                     "task": speaker_sample["task"],
-                    "annotator": speaker_sample["annotator"]}
-            group_samples_obj[speaker] = speaker_samples_obj
-        samples_obj[group_key] = group_samples_obj
+                    "annotator": speaker_sample["annotator"],
+                    "ratings": ratings_obj}
+                sample_name = f"sample_{i}"
+                group_samples_obj[sample_name] = speaker_samples_obj
+        group_name = f"group_{group_key}"
+        samples_obj[group_name] = group_samples_obj
     return samples_obj
 
 def get_grouping_columns():
@@ -138,59 +150,31 @@ def add_partner_id(speakers, samples):
     for speaker_id in speakers["SpeakerID"]:
         other_id = None
         if speaker_id in speaker_map:
-            other_id = round(speaker_map[speaker_id])
+            other_id = int(round(speaker_map[speaker_id]))
         other_speakers.append(other_id)
     speakers["OtherSpeakerID"] = other_speakers
 
 def num_to_cefr(series):
-    group_map = {0: "A1", 1: "A2", 2: "B1", 3: "B2", 4: "C1", 5: "C2"}
+    group_map = {1: "A1", 2: "A2", 3: "B1", 4: "B2", 5: "C1", 6: "C2"}
     return series.round(0).astype('Int64').map(group_map)
 
 def cefr_to_num(series):
-    group_map = {"A1": 0, "A2": 1, "B1": 2, "B2": 3, "C1": 4, "C2": 5}
+    group_map = {"A1": 1, "A2": 2, "B1": 3, "B2": 4, "C1": 5, "C2": 6}
     return series.map(group_map).round(0).astype('Int64')
 
 def add_ic_score(speakers):
     group_map = {True: "Top Half", False: "Bottom Half"}
-    score = (cefr_to_num(speakers["Speaking"]) + cefr_to_num(speakers["Interaction"])) / 2.0
-    speakers["self_ic_calc"] = score
+    speakers["SpeakingScore"] = cefr_to_num(speakers["Speaking"])
+    speakers["InteractionScore"] = cefr_to_num(speakers["Interaction"])
+    speakers["self_ic_calc"] = speakers[["SpeakingScore", "InteractionScore"]].mean(axis=1)
     score_group = speakers["self_ic_calc"] >= speakers["self_ic_calc"].median()
     score_group = score_group.map(group_map)
     speakers["Score"] = score_group
 
-def add_combined_ic_cefr(speakers):
-    cefr_group = num_to_cefr(speakers["combined_calc"])
-    speakers["Combined IC CEFR"] = cefr_group
-
-def add_combined_score(speakers):
-    group_map = {True: "Top Half", False: "Bottom Half"}
-    score = speakers[["non_verbal_calc", "construct_calc", "self_ic_calc"]].mean(axis=1)
-    speakers["combined_calc"] = score
-    score_group = speakers["combined_calc"] >= speakers["combined_calc"].median()
-    score_group = score_group.map(group_map)
-    speakers["Score2"] = score_group
-
-def get_score_corrs(speakers):
-    cols = speakers.columns
-    score_cols = ["non_verbal_calc", "self_ic_calc", "construct_calc"]
-    scores = []
-    for score_col in score_cols:
-        if score_col in cols:
-            scores.append(speakers[score_col])
-    non_nans = np.full(len(speakers), True)
-    series = []
-    for score in scores:
-        non_nans = non_nans & (~np.isnan(score))
-    for score in scores:
-        series.append(score[non_nans])
-    corrs = np.corrcoef(np.array(series))
-    return corrs, score_cols
-
-def get_score_mismatch(speakers):
-    n_start = len(speakers)
-    mismatched_speakers = speakers[~(((speakers["Score"] == "Top Half") & (speakers["Score2"] == "Top Half")) | ((speakers["Score"] == "Bottom Half") & (speakers["Score2"] == "Bottom Half")))]
-    n_end = len(mismatched_speakers)
-    return n_end / n_start, mismatched_speakers
+def add_CEFR_scores(speakers, columns=[]):
+    for col in columns:
+        new_col = f"{col}_cefr"
+        speakers[new_col] = num_to_cefr(speakers[col])
 
 def get_languages(ls):
     if not isinstance(ls,str):
@@ -233,10 +217,10 @@ def plot_column_groups(df, columns, cols = 5):
         if column not in df.columns:
             columns_not_found.append(column)
     if len(columns_not_found) > 0:
-        print(f"Columns not found: {len(columns_not_found)}")
+        dl.log(f"Columns not found: {len(columns_not_found)}")
     for column in columns_not_found:
         columns_copy.remove(column)
-        print(f"\t{column}")
+        dl.log(f"\t{column}")
     items = len(columns_copy)
     cols = 5
     rows = math.ceil(items/cols)
@@ -247,7 +231,7 @@ def plot_column_groups(df, columns, cols = 5):
         plt.subplot(rows, cols, i+1)
         keys = sorted(list(df[keyword].value_counts().keys()))
         values = list(df[keyword].value_counts()[keys])
-        plt.pie(values, labels=keys, wedgeprops={"width":0.5})
+        plt.pie(values, labels=keys, wedgeprops={"width":0.5}, autopct='%1.1f%%')
         plt.subplots_adjust(wspace=0.1, hspace=0.1)
         plt.title(keyword)
     plt.show()
@@ -260,40 +244,15 @@ def merge_all(speakers, samples):
     merged_table = speakers.merge(sessions_concat,how="outer",left_on="SpeakerID",right_on="SpeakerID")
     return merged_table
 
-def find_fair_ratings(df, label, new_label):
-    df = df.drop(index = df[df["rater"] == "R_19_old"].index)
-    df[df == "R_19_new"] = "R_19"
-    df = df.reset_index()
-    
-    mean_score = dict()
-    std_score = dict()
-    
-    for rater in df.rater.value_counts().index.to_list():
-        m = df[df["rater"] == rater][label].mean()
-        std = df[df["rater"] == rater][label].std()
-        mean_score[rater] = m
-        std_score[rater] = std
-    mean_m = np.array(list(mean_score.values())).mean()
-    mean_std = np.array(list(std_score.values())).mean()
+def combine_speakers_ratings(speakers, calcs):
+    for calc in calcs:
+        speakers = speakers.merge(calc, how="left", left_on="SpeakerID", right_on="SpeakerID")
+    return speakers
 
-    df_normed = df.copy()
-
-    for rater in df_normed.rater.value_counts().index.to_list():
-        m = mean_score[rater]
-        std = std_score[rater]
-        df_normed.loc[df_normed["rater"] == rater, label] = ((df_normed[df_normed["rater"] == rater][label] - m + mean_m)/std) * mean_std
-
-    mean_normed_m = df_normed[label].mean()
-
-    speaker_scores = dict()
-    for speaker in df_normed.speaker.value_counts().index.to_list():
-        m = df_normed[df_normed["speaker"] == speaker][label].mean() - mean_normed_m + 0.5
-        score = 5*m
-        speaker_scores[int(speaker)] = score
-
-    scores = pd.DataFrame(list(speaker_scores.values()), index=list(speaker_scores.keys()))
-    scores.columns = [new_label]
-    return scores
-
-def combine_ratings(speakers, non_verbal_calc, construct_calc):
-    return speakers.merge(non_verbal_calc, how="left", left_index=True, right_index=True).merge(construct_calc, how="left", left_index=True, right_index=True)
+def combine_samples_ratings(samples, ratings):
+    samples["task"] = samples['task'].str.lower()
+    for rating in ratings:
+        samples = samples.merge(rating.add_suffix('_1'), how="left", left_on=["task", "speaker_1"], right_on=["task_1","speaker_1"])
+        samples = samples.merge(rating.add_suffix('_2'), how="left", left_on=["task", "speaker_2"], right_on=["task_2","speaker_2"])
+        samples = samples.drop(columns = ["task_1","task_2"])
+    return samples

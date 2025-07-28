@@ -4,6 +4,7 @@ import numpy as np
 import numpy_wrapper as npw
 import npz_reader as npzr
 import npy_reader as npyr
+import data_logger as dl
 from collections import Counter
 
 class DRows:
@@ -38,7 +39,7 @@ class DRows:
                 if clean_val[-1] == "0":
                     clean_val = clean_val[:-1]
             else:
-                print(f"Unknown type \"{type(val)}\" for {val}")
+                dl.log(f"Unknown type \"{type(val)}\" for {val}")
             vals.append(clean_val)
         return vals
 
@@ -89,9 +90,9 @@ def print_in_blocks(word_list, n = 4):
     for word in word_list:
         i += 1
         if (i + 1) % n == 0 or i + 1 == len(word_list):
-            print(word)
+            dl.log(word)
         else:
-            print(word, end="\t")
+            dl.log(word, end="\t")
 
 def get_summary_info_full(summary):
     name = summary["name"]
@@ -128,11 +129,11 @@ def describe_summary(summary):
     drows.append("length", f"{performance_length} ({length})")
     drows.append("valid fields", f"{non_nan_fields} ({fields})")
     drows.append("valid values", non_nan_values)
-    print(drows.text())
+    dl.log(drows.text())
 
 def describe_summaries(summaries):
     describe_info_of_summaries(summaries)
-    print()
+    dl.log()
     describe_datas_in_summaries(summaries)
 
 def describe_info_of_summaries(summaries):
@@ -157,7 +158,7 @@ def describe_info_of_summaries(summaries):
     field_counts = np.array(field_counts)
     non_nan_value_counts = np.array(non_nan_value_counts)
 
-    print("STATISTICS")
+    dl.log("STATISTICS")
     drows = DRows()
     drows.append("summary count", len(summaries))
     drows.append("feature count", feature_counts)
@@ -165,7 +166,7 @@ def describe_info_of_summaries(summaries):
     drows.append("valid fields", non_nan_field_counts)
     drows.append("total fields", field_counts)
     drows.append("valid values", non_nan_value_counts)
-    print(drows.text())
+    dl.log(drows.text())
 
 def describe_datas_in_summaries(summaries):
     all_labels = get_labels(summaries)
@@ -178,23 +179,31 @@ def describe_datas_in_summaries(summaries):
     FG = sorted(list(all_feature_names["FG"]))
     F = sorted(list(all_feature_names["F"]))
     
-    print("LABELS")
+    dl.log("LABELS")
     print_in_blocks(L)
-    print()
-    print("INDIVIDUAL_FEATURES")
+    dl.log()
+    dl.log("INDIVIDUAL_FEATURES")
     print_in_blocks(F1)
-    print()
-    print("RELATIONAL_FEATURES")
+    dl.log()
+    dl.log("RELATIONAL_FEATURES")
     print_in_blocks(F2)
-    print()
-    print("SESSION_FEATURES")
+    dl.log()
+    dl.log("SESSION_FEATURES")
     print_in_blocks(FG)
 
-def load_summaries(names):
+def load_summaries(names, tasks=None):
     # volatile function, when you make changes, make sure you also make changes in reflective functions
     # - get labels
     summaries = dict()
     for name in names:
+        if not isinstance(tasks, type(None)):
+            found_task = False
+            for task in tasks:
+                if task in name.lower():
+                    found_task = True
+                    break
+            if not found_task:
+                continue
         npy_name, summary = npyr.load_summary_from_name(name)
         summaries[npy_name.name] = {"npy": npy_name.name, "summary":summary}
     return summaries
@@ -223,18 +232,42 @@ def count_label_values(summary):
         name = "unknown_summary"
         if "name" in summary:
             name = summary["name"]
-        print(f"Summary for {name} found to have invalid structure")
+        dl.log(f"Summary for {name} found to have invalid structure")
         valid_structure = False
         
     return individual_values_valid, individual_values, relational_values_valid, relational_values, valid_structure
 
-GET_OPTIONAL = "?"
-GET_INDEX = "!"
-GET_PATH = "/"
-GET_BRANCH = "*"
+def get_average_samples_count(sample_groupings):
+    sample_counts = []
+    for sample_grouping_key in sample_groupings:
+        sample_counts.append(len(sample_groupings[sample_grouping_key]))
+    return np.mean(sample_counts)
+
+def measure_dict_tree_size(root):
+    stack = [root]
+    depth = [0]
+    counter = 0
+    max_depth = 0
+    while len(stack) > 0:
+        el = stack.pop()
+        d = depth.pop()
+        max_depth = max(d, max_depth)
+        counter += 1
+        if isinstance(el, dict):
+            for key in list(el.keys()):
+                stack.append(el[key])
+                depth.append(d + 1)
+    return counter, max_depth
+
+G_OPT = "?"
+G_IDX = "!"
+G_PTH = "/"
+G_BRC = "*"
+G_OPTBRC = G_OPT+G_BRC
+G_STANDARD_SUMMARY_ACCES = f"{G_OPTBRC}/{G_OPTBRC}/{G_OPT}summary"
 def get(obj, path, supress_escape=False, fallback=None):
-    if not supress_escape and GET_PATH in path:
-        path = path.split(GET_PATH)
+    if not supress_escape and G_PTH in path:
+        path = path.split(G_PTH)
     if isinstance(path, str):
         path = [path]
     current_obj = obj
@@ -243,7 +276,7 @@ def get(obj, path, supress_escape=False, fallback=None):
         
         # Loop restarted inside recursion
         if isinstance(keyword, str) and len(keyword) > 0:
-            if keyword[0] == GET_BRANCH:
+            if keyword[0] == G_BRC and (isinstance(current_obj, list) or isinstance(current_obj, dict)):
                 contains_keyword = keyword[1:]
                 sub_gets = []
                 for sub_keyword in current_obj:
@@ -253,12 +286,12 @@ def get(obj, path, supress_escape=False, fallback=None):
                     sub_get = get(current_obj, sub_path, fallback)
                     sub_gets.append(sub_get)
                 return sub_gets
-            elif keyword[0] == GET_OPTIONAL:
+            elif keyword[0] == G_OPT:
                 optional_keyword = keyword[1:]
                 has_optional_get = get(current_obj, [optional_keyword] + path[i+1:], fallback)
                 nothas_optional_get = get(current_obj, path[i+1:], fallback)
                 return [has_optional_get, nothas_optional_get]
-            elif keyword[0] == GET_INDEX:
+            elif keyword[0] == G_IDX:
                 value = None
                 if len(keyword) > 1:
                     value = int(keyword[1:])
@@ -302,8 +335,8 @@ def get_labels(summaries):
     # volatile function, when you make changes, make sure you also make changes in reflective functions
     # - analysis.py summarize_analyses
     # - load_summaries
-    res_labels_self = get(summaries, f"?*/?{GET_BRANCH}/?summary/?label_summaries/?{GET_BRANCH}/self/label")
-    res_labels_others = get(summaries, f"?*/?{GET_BRANCH}/?summary/?label_summaries/?{GET_BRANCH}/others/{GET_BRANCH}/other_label")
+    res_labels_self = get(summaries, f"{G_STANDARD_SUMMARY_ACCES}/{G_OPT}label_summaries/{G_OPTBRC}/self/label")
+    res_labels_others = get(summaries, f"{G_STANDARD_SUMMARY_ACCES}/{G_OPT}label_summaries/{G_OPTBRC}/others/{G_BRC}/other_label")
     labels_1 = flatten_to_set([res_labels_self])
     labels_2 =  flatten_to_set([res_labels_others])
     labels_all = flatten_to_set([res_labels_self, res_labels_others])
@@ -323,9 +356,9 @@ def get_shapes(obj):
             shape_counter[np.shape(np.array(el))] += 1
     return shape_counter
 def get_feature_sizes(summaries, feature_name):
-    res_feature_self = get(summaries, f"?*/?*/?summary/?label_summaries/?*/self/{feature_name}")
-    res_feature_others = get(summaries, f"?*/?*/?summary/?label_summaries/?*/others/*/{feature_name}")
-    res_feature_general = get(summaries, f"?*/?*/?summary/general/{feature_name}")
+    res_feature_self = get(summaries, f"{G_STANDARD_SUMMARY_ACCES}/{G_OPT}label_summaries/{G_OPTBRC}/self/{feature_name}")
+    res_feature_others = get(summaries, f"{G_STANDARD_SUMMARY_ACCES}/{G_OPT}label_summaries/{G_OPTBRC}/others/{G_OPT}/{feature_name}")
+    res_feature_general = get(summaries, f"{G_STANDARD_SUMMARY_ACCES}/general/{feature_name}")
     feature_shapes = get_shapes([res_feature_self, res_feature_others, res_feature_general])
     return feature_shapes
 def get_keys(obj):
@@ -336,14 +369,25 @@ def get_keys(obj):
                 key_counter[key] += 1
     return key_counter
 def get_feature_names(summaries):
-    res_labels_self = get(summaries, f"?*/?*/?summary/?label_summaries/?*/self")
-    res_labels_others = get(summaries, f"?*/?*/?summary/?label_summaries/?*/others/*")
-    res_labels_general = get(summaries, f"?*/?*/?summary/general")
+    res_labels_self = get(summaries, f"{G_STANDARD_SUMMARY_ACCES}/{G_OPT}label_summaries/{G_OPTBRC}/self")
+    res_labels_others = get(summaries, f"{G_STANDARD_SUMMARY_ACCES}/{G_OPT}label_summaries/{G_OPTBRC}/others/{G_BRC}")
+    res_labels_general = get(summaries, f"{G_STANDARD_SUMMARY_ACCES}/general")
     feature_names_1 = get_keys([res_labels_self])
     feature_names_2 = get_keys([res_labels_others])
     feature_names_general = get_keys([res_labels_general])
     feature_names_all = get_keys([res_labels_self, res_labels_others, res_labels_general])
     return {"F1": feature_names_1, "F2": feature_names_2, "FG": feature_names_general, "F": feature_names_all}
+
+def get_rating_names(summaries):
+    res_labels_general = get(summaries, f"{G_STANDARD_SUMMARY_ACCES}/general")
+    feature_names_general = get_keys([res_labels_general])
+    not_ratings = []
+    for feature in feature_names_general:
+        if "rating" not in feature:
+            not_ratings.append(feature)
+    for feature in not_ratings:
+        del feature_names_general[feature]
+    return feature_names_general
 
 def string_replace(old_value, find, replace):
     if isinstance(old_value,np.str_):
@@ -386,6 +430,7 @@ def apply_sample_groupings_to_summaries(summaries, sample_groupings):
             npz = get(sample, "npz")
             speaker = get(sample, "speaker")
             S = get(sample, "S")
+            ratings = get(sample, "ratings")
             found = False
             for summary_key in summaries:
                 summary_obj = summaries[summary_key]
@@ -398,7 +443,9 @@ def apply_sample_groupings_to_summaries(summaries, sample_groupings):
                 
                 # Add npy, general, labels to new summary
                 if npy not in group_summaries:
-                    group_summaries[npy] = {'npy': copy.deepcopy(npy), 'summary':{'general': copy.deepcopy(summary['general'])}}
+                    group_summaries[npy] = {'npy': copy.deepcopy(npy), 'speaker': copy.deepcopy(speaker), 'S': copy.deepcopy(S), 'summary':{'general': copy.deepcopy(summary['general'])}}
+                    for rating_key in ratings:
+                        group_summaries[npy]["summary"]["general"][f"rating_{rating_key}"] = ratings[rating_key]
 
                 # Copy label_summaries from old summary
                 label_summaries = summary['label_summaries']
@@ -423,11 +470,16 @@ def apply_sample_groupings_to_summaries(summaries, sample_groupings):
                 no_sessions_found.add(speaker)
                 count_not_found += 1
         
-        print(f"For grouping \"{grouping}\", {count_not_found} out of {count_total} speakers didn't have any recorded sessions.")
+        if count_not_found > 0:
+            dl.log(f"For grouping \"{grouping}\", {count_not_found} out of {count_total} speakers didn't have any recorded sessions.")
         summary_groupings[grouping] = group_summaries
-    print(f"The speakers without recorded sessions were:")
-    for speaker in sorted(list(no_sessions_found)):
-        print(f"\t{speaker}")
+    if len(no_sessions_found) > 0:
+        dl.log(f"The speakers without recorded sessions were:")
+        for speaker in sorted(list(no_sessions_found)):
+            dl.log(f"\t{speaker}")
+    else:
+        dl.log(f"No missing sessions.")
+
     return summary_groupings
 
 def sanitize_sample(sample, sanitize_value, sample_size):
@@ -445,7 +497,7 @@ def get_first_non_nan(obj, path):
 def get_samples(summary, feature_name, self_labels=None, other_labels=None, sanitize=True, sanitize_value=np.nan, sample_size=()):
     # Single value per matrix (general)
     if isinstance(self_labels, type(None)):
-        sample = get_first_non_nan(summary, f"summary/?label_summaries/general/{feature_name}")
+        sample = get_first_non_nan(summary, f"summary/{G_OPT}label_summaries/general/{feature_name}")
         if sanitize:
             sample = sanitize_sample(sample, sanitize_value, sample_size)
         return sample
@@ -461,13 +513,13 @@ def get_samples(summary, feature_name, self_labels=None, other_labels=None, sani
         if not isinstance(other_labels, type(None)):
             # Multiple values per label (other)
             for j, l2 in enumerate(other_labels):
-                sample = get_first_non_nan(summary, f"summary/?label_summaries/{l1}/others/{l2}/{feature_name}")
+                sample = get_first_non_nan(summary, f"summary/{G_OPT}label_summaries/{l1}/others/{l2}/{feature_name}")
                 if sanitize:
                     sample = sanitize_sample(sample, sanitize_value, sample_size)
                 matrix[i, j] = sample
         else:
             # Single value per label (self)
-            sample = get_first_non_nan(summary, f"summary/?label_summaries/{l1}/self/{feature_name}")
+            sample = get_first_non_nan(summary, f"summary/{G_OPT}label_summaries/{l1}/self/{feature_name}")
             if sanitize:
                 sample = sanitize_sample(sample, sanitize_value, sample_size)
             matrix[i] = sample
@@ -487,12 +539,16 @@ def gather_session_samples(summaries, feature_name, self_labels=None, other_labe
                              self_labels=self_labels, other_labels=other_labels,
                              sanitize=sanitize, sanitize_value=sanitize_value, sample_size=sample_size)
         npy = summary["npy"]
-        session_samples[npy] = {"npy": npy, "sample": sample, "self_labels": self_labels, "other_labels": other_labels}
+        S = summary["S"]
+        speaker = summary["speaker"]
+        session_samples[npy] = {"npy": npy, "S": S, "speaker": speaker, "sample": sample, "self_labels": self_labels, "other_labels": other_labels}
     
     return session_samples
 
-
-def seperate_speaker_from_session(speaker, sample, self_labels, other_labels, collapse=False):
+COLLAPSE_NONE = "none"
+COLLAPSE_SELF_LABELS = "self"
+COLLAPSE_OTHER_LABELS = "other"
+def seperate_speaker_from_session(speaker, sample, self_labels, other_labels, collapse="none"):
     other_speaker = npw.get_speaker_other(speaker)
 
     if not isinstance(self_labels, type(None)):
@@ -509,10 +565,15 @@ def seperate_speaker_from_session(speaker, sample, self_labels, other_labels, co
     else:
         new_other_labels = other_labels
     
-    if collapse:
-        self_mask = npzr.has(self_labels, speaker)
-        new_sample = sample[self_mask]
-        new_self_labels = new_self_labels[self_mask]
+    if isinstance(collapse, str) and collapse != COLLAPSE_NONE:
+        if collapse == COLLAPSE_SELF_LABELS:
+            collapse_mask = npzr.nothas(new_self_labels, npw.SPEAKER_OTHER)
+            new_sample = sample[collapse_mask]
+            new_self_labels = new_self_labels[collapse_mask]
+        if collapse == COLLAPSE_OTHER_LABELS:
+            collapse_mask = npzr.nothas(new_other_labels, npw.SPEAKER_OTHER)
+            new_sample = sample[:,collapse_mask]
+            new_other_labels = new_other_labels[collapse_mask]
     else:
         new_sample = sample
 
@@ -525,13 +586,14 @@ def sessions_to_speakers(session_samples, collapse=False):
     for sample_key in session_samples:
         session_sample = session_samples[sample_key]
         npy = session_sample["npy"]
+        S = session_sample["S"]
+        speaker = session_sample["speaker"]
         sample = session_sample["sample"]
         self_labels = session_sample["self_labels"]
         other_labels = session_sample["other_labels"]
-        for speaker in npw.get_speakers():
-            new_npy = f"{npy}_{speaker}"
-            new_sample, new_self_labels, new_other_labels = seperate_speaker_from_session(speaker, sample, self_labels, other_labels, collapse=collapse)
-            speaker_samples[new_npy] = {"npy": new_npy, "sample": new_sample, "self_labels": new_self_labels, "other_labels": new_other_labels}
+        sample_name = f"{npy}_{S}"
+        new_sample, new_self_labels, new_other_labels = seperate_speaker_from_session(S, sample, self_labels, other_labels, collapse=collapse)
+        speaker_samples[sample_name] = {"npy": sample_name, "sample": new_sample, "self_labels": new_self_labels, "other_labels": new_other_labels, "speaker": speaker}
     return speaker_samples
         
 # Feature is already chosen, all samples have been forced to be the same size
@@ -605,7 +667,7 @@ def map_samples_to_common_matrix(all_samples, all_self_labels=None, all_others_l
 def find_feature_type(self_features, others_features, general_features, feature_name):
     feature_type = None
     if sum([feature_name in self_features, feature_name in others_features, feature_name in general_features]) > 1:
-            print("Multiple options for feature.")
+            dl.log("Multiple options for feature.")
     if feature_name in self_features:
         feature_type = "individual"
     elif feature_name in others_features:
@@ -619,7 +681,7 @@ def replace_if_none(origianl_value, replacement_value):
         return replacement_value
     return origianl_value
 
-def find_noned_labels(sample_group, self_labels=None, other_labels=None):
+def fill_labels(sample_group, self_labels=None, other_labels=None):
     if isinstance(self_labels, type(None)) or isinstance(self_labels, type(None)):
         all_labels = get_labels(sample_group)
         L1 = all_labels["L1"]
@@ -628,7 +690,7 @@ def find_noned_labels(sample_group, self_labels=None, other_labels=None):
         other_labels = replace_if_none(other_labels, L2)
     return self_labels, other_labels
             
-def find_noned_features(sample_group, self_features=None, other_features=None, general_features=None):
+def fill_features(sample_group, self_features=None, other_features=None, general_features=None):
     if isinstance(self_features, type(None)) or isinstance(other_features, type(None)) or isinstance(general_features, type(None)):
         all_feature_names = get_feature_names(sample_group)
         F1 = sorted(list(all_feature_names["F1"]))
@@ -637,25 +699,27 @@ def find_noned_features(sample_group, self_features=None, other_features=None, g
         self_features = replace_if_none(self_features, F1)
         other_features = replace_if_none(other_features, F2)
         general_features = replace_if_none(general_features, FG)
-    return self_features, other_features, general_features           
+    return self_features, other_features, general_features
 
-def find_labels_and_features(sample_group, self_labels=None, other_labels=None, self_features=None, other_features=None, general_features=None):
-    self_labels, other_labels = find_noned_labels(sample_group, self_labels=self_labels, other_labels=other_labels)
-    self_features, other_features, general_features = find_noned_features(sample_group, self_features=self_features, other_features=other_features, general_features=general_features)
-    return self_labels, other_labels, self_features, other_features, general_features
+def fill_ratings(sample_group, ratings=None):
+    if isinstance(ratings, type(None)):
+        ratings = sorted(list(get_rating_names(sample_group)))
+    return ratings
 
 def find_sample_size_and_feature_type(sample_group, feature_name, self_features=None, other_features=None, general_features=None, sample_size=None, feature_type=None):
-    self_features, other_features, general_features = find_noned_features(sample_group, self_features=self_features, other_features=other_features)
+    self_features, other_features, general_features = fill_features(sample_group, self_features=self_features, other_features=other_features, general_features=general_features)
     if isinstance(sample_size, type(None)):
-        sample_size = get_feature_sizes(sample_group, feature_name).most_common(1)[0][0]
+        sample_size = tuple([])
+        all_sample_sizes = get_feature_sizes(sample_group, feature_name)
+        if len(all_sample_sizes) > 0:
+            sample_size = get_feature_sizes(sample_group, feature_name).most_common(1)[0][0]
     if isinstance(feature_type, type(None)):
         feature_type = find_feature_type(self_features, other_features, general_features, feature_name)
     return sample_size, feature_type
 
-#TODO: add support for per-session-features (no self_labels or other_labels)
 def get_data_matrix(sample_group, feature_name, self_labels=None, other_labels=None, collapse=False, sample_size=None, feature_type=None, self_features=None, other_features=None, general_features=None):
-    self_labels, other_labels = find_noned_labels(sample_group, self_labels=self_labels, other_labels=other_labels)
-    self_features, other_features, general_features = find_noned_features(sample_group, self_features=self_features, other_features=other_features, general_features=general_features)
+    self_labels, other_labels = fill_labels(sample_group, self_labels=self_labels, other_labels=other_labels)
+    self_features, other_features, general_features = fill_features(sample_group, self_features=self_features, other_features=other_features, general_features=general_features)
     sample_size, feature_type = find_sample_size_and_feature_type(sample_group, feature_name, self_features=self_features, other_features=other_features, general_features=general_features)
     
     if feature_type == "individual" or feature_type == "general":

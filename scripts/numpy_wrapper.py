@@ -55,12 +55,17 @@ def valid(data, min_n = 0):
     if np.isscalar(data):
         if np.isnan(data): return False
         if np.isinf(data): return False
-    if isinstance(data, np.ndarray) and data.shape[0] <= min_n: return False
-    if isinstance(data, list) and len(data) <= min_n: return False
+    if isinstance(data, np.ndarray) and data.shape[0] < min_n: return False
+    if isinstance(data, list) and len(data) < min_n: return False
     return True
 
-def valid_dist(data):
-    return np.std(data, ddof=1) > 0
+def valid_dist(data, total_n = 4, unique_n = 1):
+    notnan = ~np.isnan(data)
+    if not valid(data[notnan], total_n):
+        return False
+    if len(np.unique(data[notnan])) < unique_n:
+        return False
+    return True
 
 def quantiles(data, q, method="linear"):
     if not valid(data):

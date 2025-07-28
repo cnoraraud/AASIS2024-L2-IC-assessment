@@ -13,6 +13,7 @@ import data_displayer as dd
 import io_tools as iot
 import data_logger as dl
 import naming_tools as nt
+import experiment_runner as expr
 
 def source_data(overwrite=False):
     dl.log("Started creationg folders based on config")
@@ -39,6 +40,10 @@ def preprocess_data(overwrite=True):
 def run_analysis(overwrite=True):
     dl.log("Started analysing data")
     summarize_all_data(overwrite=overwrite)
+
+def run_statistics(overwrite=True, collapse=True):
+    dl.log("Started gathering statistics")
+    expr.run_statistics(overwrite=overwrite, collapse=collapse, groupings=[["SpeakerID"], ["holistic_cefr"], ["Score"]], tasks=["task5"])
     
 def data_pipeline(overwrite=True):
     source_data(overwrite=overwrite)
@@ -46,6 +51,7 @@ def data_pipeline(overwrite=True):
     add_to_data(overwrite=overwrite)
     preprocess_data(overwrite=overwrite)
     run_analysis(overwrite=overwrite)
+    run_statistics(overwrite=overwrite)
     dl.log("Finished processing")
 
 def get_prints_data(key, row, wavs, overwrite=True):
@@ -138,26 +144,21 @@ def get_prints_data(name, D, L, overwrite=False):
 
 def create_all_data(overwrite=True):
     res = iterate_through_data_provider(create_and_write_DL, overwrite=overwrite)
-    #print(res)
 
 def display_all_data(overwrite = True):
     iterate_through_npz_provider(display_data, overwrite=overwrite)
 
 def write_joysticks_to_all_data(overwrite = True):
     res = iterate_through_npz_provider(write_joystick_to_data, overwrite=overwrite)
-    #print(res)
 
 def write_facial_features_to_all_data(overwrite = True):
     res = iterate_through_npz_provider(write_facial_feature_to_data, overwrite=overwrite)
-    #print(res)
 
 def clean_all_data(overwrite=True):
     res = iterate_through_npz_provider(clean_data, overwrite=overwrite)
-    #print(res)
 
 def summarize_all_data(overwrite=True):
     res = iterate_through_npz_provider(summarize_data, overwrite=overwrite)
-    #print(res)
 
 # TODO: (low prio) make it so when not overwriting, files aren't read unnecassarily
 def iterate_through_data_provider(method, n = math.inf, offset = 0, overwrite = True):

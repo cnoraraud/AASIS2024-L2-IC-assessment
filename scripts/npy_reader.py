@@ -10,7 +10,7 @@ import data_logger as dl
 
 def get_summary_info_io(summary):
     individual_valid, individual_total, relational_valid, relational_total, valid_structure = sumr.count_label_values(summary)
-    features = summary["general"]["features"]
+    features = summary["general"]["feature_count"]
     performance_length = summary["general"]["performance_length"]
     input_info = f"({features},{performance_length})"
     if valid_structure:
@@ -24,44 +24,50 @@ def get_summary_info_io(summary):
 def write_summary(name, summary):    
     npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
     npy_path = iot.npys_path() / nt.file_swap(name, "npy", all=False)
-    input_info, output_info = get_summary_info_io(summary)
+    input_info = None
+    output_info = None
+
     np.save(str(npy_path), summary)
+    try:
+        input_info, output_info = get_summary_info_io(summary)
+    except Exception as e:
+        dl.log_stack("Failed to create summary info.")
+    
     del summary
     return [dl.write_to_manifest_new_file(dl.SUMMARY_TYPE, npz_path, npy_path, input_info=input_info, output_info=output_info)]
-        
-def summarize_data(name, D, L, overwrite=False):
-    if not overwrite:
-        npy_path = iot.npys_path() / nt.file_swap(name, "npy", all = False)
-        if npy_path.exists():
-            existed_log = f"{npy_path} existed, skipping summary step."
-            dl.tprint(existed_log)
-            return [existed_log]
 
+def get_summary(name, D, L):
     L = npzr.anonymize_speakers(L)
+    
     D_focused, L = npzr.focus_on_label(D, L, "performance")
     D_focused, L = npzr.add_turntaking(D_focused, L)
+
+    feature_count = D_focused.shape[0]
+    performance_length = D_focused.shape[1]
+    total_length = D.shape[1]
+
+    D_smooth = npzr.get_D_smooth(D_focused)
+    discrete_channels, binary_channels = npzr.identify_data_type(D_focused, L)
     
-    segment_filter = npzr.has(L, nt.AA_TAG) | npzr.has(L, nt.ANNOTATION_TAG) | npzr.has(L, "vad")
-    ond_filter = segment_filter
-    mnw_filter = segment_filter
-    corr_filter = npzr.full(L)
+    D_binary = npzr.transform_to_binary(D_focused, discrete_channels, binary_channels, D_smooth=D_smooth)
+    D_thresholded = npzr.transform_to_thresholded(D_focused, discrete_channels, binary_channels, D_smooth=D_smooth)
+    D_continuous = npzr.transform_to_continuous(D_focused, discrete_channels, binary_channels, D_smooth=D_smooth)
 
-    
-    D_ond, L_ond = npzr.do_label_select(D_focused, L, ond_filter)
-    D_ond = filt.flatten(D_ond)
-    ond_analyses = ana.get_all_segment_overlaps_and_delays(L_ond, D_ond)
+    L_sc = L
+    L_mnw = L
+    L_corr = L
 
-    D_mnw, L_mnw = npzr.do_label_select(D_focused, L, mnw_filter)
-    mnw_analyses = ana.get_all_segment_masses_and_widths(L_mnw, D_mnw)
+    ond_analyses = ana.get_all_segment_comparisons(L_sc, D_binary, D_thresholded)
 
-    D_corr, L_corr = npzr.do_label_select(D_focused, L, corr_filter)
-    corr_analyses = ana.get_all_correlations(L_corr, D_corr)
+    mnw_analyses = ana.get_all_segment_masses_and_widths(L_mnw, D_thresholded)
 
-    del D_ond, D_mnw, D_corr
+    corr_analyses = ana.get_all_correlations(L_corr, D_continuous)
+
+    del D_binary, D_thresholded, D_continuous, D_focused, D_smooth
     
     analyses = ana.group_analyses(L, ond_analyses, mnw_analyses, corr_analyses)
     Ls = {
-        "overlaps_and_delays": L_ond,
+        "segment_comparisons": L_sc,
         "masses_and_widths": L_mnw,
         "correlations": L_corr
     }
@@ -71,14 +77,24 @@ def summarize_data(name, D, L, overwrite=False):
     summary = dict()
     summary = {"label_summaries": ana.summarize_analyses(L, analyses, Ls),
                "general": {
-                    "features": D_focused.shape[0],
-                    "length": D.shape[1],
-                    "performance_length": D_focused.shape[1]},
+                    "feature_count": feature_count,
+                    "length": total_length,
+                    "performance_length": performance_length},
                 "labels": L,
                 "name": name}
     
-    del Ls, L_ond, L_mnw, L_corr, analyses
+    del Ls, L_sc, L_mnw, L_corr, analyses
+    
+    return summary
 
+def summarize_data(name, D, L, overwrite=False):
+    if not overwrite:
+        npy_path = iot.npys_path() / nt.file_swap(name, "npy", all = False)
+        if npy_path.exists():
+            existed_log = f"{npy_path} existed, skipping summary step."
+            dl.log(existed_log)
+            return [existed_log]
+    summary = get_summary(name, D, L)
     return write_summary(name, summary)
 
 def npy_list():

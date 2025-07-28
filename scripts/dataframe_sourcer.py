@@ -39,6 +39,7 @@ def process_names(names):
         tasks.append(row_split[2].replace("task",""))
         annotators.append(row_split[-1].split(".")[0])
     return pd.DataFrame({"datetime": dates, "speaker_1": speaker1s, "speaker_2": speaker2s, "task": tasks, "annotator": annotators})
+
 def get_sample_dataframe():
     names = pd.DataFrame()
     npzs = []
@@ -66,57 +67,90 @@ def get_speaker_dataframe():
     spc_path = iot.special_data_path()
     spc_csvs = iot.list_dir(spc_path,"csv")
     unis = pd.read_csv(spc_path/'universities.csv',sep=";")
-    ratings = pd.read_csv(spc_path/'ratings.csv',sep=";")
     speaker_info = pd.read_csv(spc_path/'consentquiz.csv',sep=";",encoding='latin-1')
-    
-    tasks = ratings["task"]
-    just_ratings = ratings.drop(["task"], axis=1)
-    means = just_ratings.mean(axis=1)
-    ratings_by_speaker = dict()
-    for task, mean in zip(list(tasks), means):
-        task_values = task.split(" ")
-        num_values = []
-        other_values = []
-        for value in task_values:
-            if value.isnumeric():
-                num_values.append(int(value))
-            else:
-                other_values.append(value)
-        speaker = num_values[0]
-        feature = ":".join(other_values)
-        if speaker not in ratings_by_speaker:
-            ratings_by_speaker[speaker] = dict()
-        ratings_by_speaker[speaker][feature] = mean
-    new_ratings = pd.DataFrame(ratings_by_speaker).T.reset_index()
-    cols = list(new_ratings.columns)
-    cols[0] = "SpeakerID"
-    new_ratings.columns = cols
 
-    return unis.merge(speaker_info, on="SpeakerID", how="outer").merge(new_ratings, on="SpeakerID", how="outer")
+    return unis.merge(speaker_info, on="SpeakerID", how="outer")
 
 def get_cefr_ratings_dataframe():
     cefr = pd.read_csv(iot.ratings_csvs_path() / 'cefr_ratings.csv')
     cefr[cefr == -9999] = np.nan
     cefr[cefr == 9999] = np.nan
-    cefr["construct_score"] = (cefr[["holistic", "fluency", "turn_taking"]].mean(axis=1) - 1)/5
+    cefr["construct_score"] = cefr[["holistic", "fluency", "turn_taking"]].mean(axis=1)
     return cefr
 
 def get_nonverbal_ratings_dataframe():
     non_verb = pd.read_csv(iot.ratings_csvs_path() / 'non_verbal_ratings.csv')
     non_verb[non_verb == 9999] = np.nan
     non_verb[non_verb == 100] = np.nan
-    non_verb["if_contributed"] = (non_verb["if_contributed"] + 1) / 2
-    non_verb["IC_score"] = non_verb[["face", "eye_contact", "head", "vocalizing", "hands", "if_contributed"]].mean(axis=1)
+    non_verb[non_verb == -9999] = np.nan
+    non_verb[non_verb == -100] = np.nan
+    non_verb["IC_score"] = non_verb[["face", "head", "vocalizing", "hands"]].mean(axis=1)
     return non_verb
 
 def get_overall_ratings_dataframe():
     return pd.read_csv(iot.ratings_csvs_path() / 'overall_ratings.csv')
 
-def get_speakers_full_dataframe():
+def select_for_task(df, tasks=[]):
+    if len(tasks) == 0:
+        return df
+    cond = df["task"] == tasks[0]
+    for i in range(1,len(tasks)):
+        new_cond = df["task"] == tasks[i]
+        cond = cond | new_cond
+    return df[cond]
+
+def ratings_to_speakers(df, tasks):
+    return select_for_task(df, tasks).drop(columns=["task"]).groupby(by="speaker").mean().reset_index().rename(columns={"speaker":"SpeakerID"})
+
+def get_rater_dict(ratings, target_columns, anchors_only=True):
+    anchor_speakers = [20, 21, 35, 36, 87, 88]
+
+    speakers = ratings["speaker"].unique()
+    rater_dict = dict() 
+    for speaker in speakers:
+        if anchors_only and speaker not in anchor_speakers:
+            continue
+        speaker_ratings = ratings[ratings["speaker"] == speaker]
+        mean_ratings = speaker_ratings[target_columns].mean()
+        dif = speaker_ratings[target_columns] - mean_ratings
+        raters = speaker_ratings.loc[dif.index][["rater","speaker"]]
+        dif_w_raters = dif.merge(raters, left_index=True, right_index=True)
+        for i, row in dif_w_raters.iterrows():
+            rater = row["rater"]
+            rater_difs = row[["speaker"] + target_columns]
+            if rater not in rater_dict:
+                rater_dict[rater] = []
+            rater_dict[rater].append(rater_difs)
+    return rater_dict
+
+def get_adjusted_ratings(ratings, target_columns, ignore_columns, anchors_only=True):
+    rater_dict = get_rater_dict(ratings, target_columns, anchors_only=anchors_only)
+    
+    df_adjusted = ratings.copy().drop(columns = ignore_columns)
+    for rater in rater_dict.keys():
+        adjustement = pd.DataFrame(rater_dict[rater]).groupby(by="speaker").mean().mean()
+        indexes = df_adjusted[df_adjusted["rater"] == rater].index
+        df_adjusted.loc[indexes, target_columns] -= adjustement
+
+    df_adjusted_ratings = df_adjusted.drop(columns = ["rater"]).groupby(by=["task","speaker"]).mean().reset_index()
+    return df_adjusted_ratings
+
+def get_speaker_nonverbals(tasks, anchors_only=True):
+    nonverbal_adjusted_ratings = get_adjusted_ratings(get_nonverbal_ratings_dataframe(), ["face", "eye_contact", "head", "vocalizing", "if_contributed"], ["question_ind", "other_comment","feature_comment","impact_comment","one_row"], anchors_only=anchors_only)
+    return ratings_to_speakers(nonverbal_adjusted_ratings, tasks), nonverbal_adjusted_ratings
+
+def get_speaker_cefrs(tasks, anchors_only=True):
+    cefr_adjusted_ratings = get_adjusted_ratings(get_cefr_ratings_dataframe(), ["holistic", "range", "accuracy", "fluency", "pronunciation", "turn_taking"], ["task_type", "question_ind","comment","one_row"], anchors_only=anchors_only)
+    return ratings_to_speakers(cefr_adjusted_ratings, tasks), cefr_adjusted_ratings
+
+def get_speakers_samples_full_dataframe(tasks, anchors_only=True):
     speakers = get_clean_speaker_dataframe()
     samples = get_sample_dataframe()
-    non_verb = get_nonverbal_ratings_dataframe()
-    cefr = get_cefr_ratings_dataframe()
+    samples["task"] = samples["task"].str.lower()
+    samples = select_for_task(samples, tasks=nt.task_names_no_prefix(tasks))
+
+    non_verbal_speaker, non_verbal_adjusted = get_speaker_nonverbals(nt.task_names_no_prefix(tasks), anchors_only=anchors_only)
+    cefr_calc_speaker, cefr_adjusted = get_speaker_cefrs(nt.task_names_no_prefix(tasks), anchors_only=anchors_only)
 
     dfr.add_partner_id(speakers, samples)
     dfr.add_language_counts(speakers)
@@ -124,11 +158,9 @@ def get_speakers_full_dataframe():
     dfr.add_partner_relation(speakers)
     dfr.add_ic_score(speakers)
 
-    non_verbal_calc = dfr.find_fair_ratings(non_verb, "IC_score", "non_verbal_calc")
-    construct_calc = dfr.find_fair_ratings(cefr, "construct_score", "construct_calc")
+    speakers = dfr.combine_speakers_ratings(speakers, [non_verbal_speaker, cefr_calc_speaker])
+    samples = dfr.combine_samples_ratings(samples, [non_verbal_adjusted, cefr_adjusted])
 
-    speakers = dfr.combine_ratings(speakers, non_verbal_calc, construct_calc)
-    dfr.add_combined_score(speakers)
-    dfr.add_combined_ic_cefr(speakers)
+    dfr.add_CEFR_scores(speakers, ["holistic"])
 
-    return speakers
+    return speakers, samples

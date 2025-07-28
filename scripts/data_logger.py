@@ -2,6 +2,9 @@ import traceback
 import io_tools as iot
 from datetime import datetime
 import pathlib as p
+import os
+
+pid = os.getpid()
 
 def tstring(log_string, l=1):
     today = datetime.now()
@@ -10,19 +13,20 @@ def tstring(log_string, l=1):
         today = ""
         fs = ""
     tabs = "\t"*l
-    return f"{tabs}{today}{fs}{log_string}"
+    return f"[p{pid}] {tabs}{today}{fs}{log_string}"
 
 def tprint(log_string):
     print(tstring(log_string))
 
 def log(log_string):
     tprint(log_string)
+    write_to_manifest_log(DEBUG_TYPE, log_string)
 
 def log_stack(log_string=None):
     if not isinstance(log_string, type(None)):
         log(log_string)
-    tprint(traceback.format_exc())
-
+    log(traceback.format_exc())
+    
 def hand_base(name, mtime):
     return f"{name} (m: {mtime})"
 
@@ -35,6 +39,31 @@ def open_manifest(manifest_type):
 COPY_TYPE = "copy"
 DATA_TYPE = "data_matrix"
 SUMMARY_TYPE = "summary"
+STATISTICS_TYPE = "statistics"
+DEBUG_TYPE = "debug"
+DEFAULT_TYPE = "default"
+
+def write_to_manifest_log(manifest_type=DEFAULT_TYPE, log_string="unknown", l=1):
+    with open_manifest(manifest_type) as manifest:
+        twrite(manifest, log_string, l=l)
+    return log_string
+
+def write_to_manifest_new_summary_file(manifest_type, new_path, input_info = None, output_info = None):
+    new_metadata = iot.read_metadata_from_path(new_path)
+    new_name = new_metadata["name"]
+    new_mtime = new_metadata["mtime"]
+    log_string = "unknown"
+    with open_manifest(manifest_type) as manifest:
+        right_hand = hand_base(new_name, new_mtime)
+        if not isinstance(input_info, type(None)):
+            left_hand = f"[{input_info}]"
+        if not isinstance(output_info, type(None)):
+            right_hand = f"{right_hand} [{output_info}]"
+        log_string = f"{right_hand}"
+        if not isinstance(left_hand, type(None)):
+            log_string = f"{left_hand} => {right_hand}"
+        twrite(manifest, log_string)
+    return log_string
 
 def write_to_manifest_new_file(manifest_type, old_path, new_path, input_info = None, output_info = None):
     old_metadata = iot.read_metadata_from_path(old_path)

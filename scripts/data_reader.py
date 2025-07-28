@@ -5,6 +5,7 @@ from pympi import Elan as elan
 
 import wav_reader as wavr
 import io_tools as iot
+import data_logger as dl
 
 def num_to_n_chars(num:int, n:int):
     return str(num).rjust(n, "0")[-n:]
@@ -75,7 +76,7 @@ def list_eaf_with_regex(regex):
             data_table[key]["eafpath"] = eaf
             eafs_path_list.append(eaf)
         else:
-            print(f"Didn't match \'{eaf.name}\'.")
+            dl.log(f"Didn't match \'{eaf.name}\'.")
     
     return sorted(eafs_path_list), data_table
 
@@ -122,8 +123,8 @@ def get_sessions(table = None, n = None, start:int = 0, sr:int = None, do_wavs =
 def test_eaf_reading():
     eafs, table = list_eaf()
     for eaf in eafs:
-        print(eaf)
-    print(f"eaf count {len(eafs)}")
+        dl.log(eaf)
+    dl.log(f"eaf count {len(eafs)}")
 
 class DataProvider:
     eafs = []
@@ -161,9 +162,9 @@ class DataProvider:
         for key in rows:
             row = rows[key]
             wavs = row["wavs"]
-            print(f"[{key}] wavs: {len(wavs)}")
+            dl.log(f"[{key}] wavs: {len(wavs)}")
             for i, wav in enumerate(wavs):
-                print(f"\t{i}: rate {wav[0]}, data shape {wav[1].shape}, t {wav[1].shape[0]/wav[0]} (s)")
+                dl.log(f"\t{i}: rate {wav[0]}, data shape {wav[1].shape}, t {wav[1].shape[0]/wav[0]} (s)")
     
 if __name__ == '__main__':
     globals()[sys.argv[1]]()

@@ -107,10 +107,10 @@ def anonymize_speakers(labels):
             if source not in source_map:
                 source_map[source] = anon_source
             if source_map[source] != anon_source:
-                print("Duplicated sources given same anonymous title.")
-                print("Possible presumptions broken:\n")
-                print("\t- Only 2 speakers present.")
-                print("\t- One speaker always even numbered, the other always odd")
+                dl.log("Duplicated sources given same anonymous title.")
+                dl.log("Possible presumptions broken:\n")
+                dl.log("\t- Only 2 speakers present.")
+                dl.log("\t- One speaker always even numbered, the other always odd")
         new_source = nt.compact_sources(anon_sources, plural_nicks=True)
         tag = nt.find_tag(label)
         feature = nt.find_feature(label)
@@ -174,14 +174,19 @@ def write_DL(name, D, L, write_to_manifest=True, overwrite=True):
         npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
         if npz_path.exists():
             existed_log = f"{npz_path} existed, skipping DL step."
-            dl.tprint(existed_log)
+            dl.log(existed_log)
             return npz_path, [existed_log]
     
     eaf_path = iot.eafs_path() / nt.file_swap(name, "eaf", all=False)
     npz_path = iot.npzs_path() / nt.file_swap(name, "npz", all=False)
     np.savez(npz_path, D=D, L=L)
-    input_info = eafr.eaf_info(eaf_path)
-    output_info = DL_info(D, L)
+    input_info = None
+    output_info = None
+    try:
+        input_info = eafr.eaf_info(eaf_path)
+        output_info = DL_info(D, L)
+    except Exception as e:
+        dl.log_stack("Failed to get DL info.")
     if write_to_manifest:
         return npz_path, [dl.write_to_manifest_new_file(dl.DATA_TYPE, eaf_path, npz_path, input_info=input_info, output_info=output_info)]
     else:
@@ -195,7 +200,7 @@ def npz_list():
 
 def print_npz():
     for name in npz_list():
-        print(name)
+        dl.log(name)
 
 def print_annotation_info():
     npzs = npz_list()
@@ -224,10 +229,10 @@ def print_annotation_info():
             overlap_ms += min(mss)
             overlap_speakers += 2
         annotation_count += len(mss)
-    print("ANNOTATION STATISTICS:")
-    print(f"- Recordings: {recording_count}")
-    print(f"- Annotations: {annotation_count}")
-    print(f"- Minutes: {(total_ms/1000)/60:.2f}")
+    dl.log("ANNOTATION STATISTICS:")
+    dl.log(f"- Recordings: {recording_count}")
+    dl.log(f"- Annotations: {annotation_count}")
+    dl.log(f"- Minutes: {(total_ms/1000)/60:.2f}")
 
 def read_DL_metadata_from_name(name):
     name = nt.file_swap(name, "npz")
@@ -322,7 +327,7 @@ class NpzProvider:
             rows = self.table
         for key in rows:
             row = rows[key]
-            print(f"[{key}]")
+            dl.log(f"[{key}]")
 
 def get_data_segments(D, L, segments: list):
     # segments are in format {event: int, start: int, end: int}
@@ -536,6 +541,82 @@ def get_all_features():
         for label in read_DL_from_name(npz)[2].tolist():
             features.add(nt.find_feature(label))
     return sorted(list(features))
+
+MAXDISCRETE = 50
+def identify_data_type(D, L, th=MAXDISCRETE):
+    discrete_channels = np.full(L.shape, True)
+    binary_channels = np.full(L.shape, True)
+    for i in range(D.shape[0]):
+        label = L[i]
+        is_discrete = True
+        is_binary = True
+        if "energy" in label or "ff:" in label or "cc:" in label:
+            is_discrete = False
+            is_binary = False
+        elif "text:" in label:
+            is_binary = False
+        elif len(np.unique(D[i,:])) > th:
+            is_discrete = False
+            is_binary = False
+        discrete_channels[i] = is_discrete
+        binary_channels[i] = is_binary
+    return discrete_channels, binary_channels
+
+def get_D_smooth(D, k=3, n=3000):
+    D_smooth = D
+    for i in range(k):
+        D_smooth = ana.apply_method_to_all_features(D_smooth, filt.ma, {"n": n})
+    return D_smooth
+
+def transform_to_continuous(D, discrete_channels, binary_channels, D_smooth=None):
+    D_continuous = np.copy(D)
+    if isinstance(D_smooth, type(None)):
+        D_smooth = get_D_smooth(D_continuous[discrete_channels])
+    else:
+        D_smooth = D_smooth[discrete_channels]
+    D_continuous[discrete_channels] = D_smooth
+    return D_continuous
+
+def transform_to_binary(D, discrete_channels, binary_channels, th=1, D_smooth=None):
+    D_binary = np.copy(D)
+    D_binary[discrete_channels] = filt.flatten(D_binary[discrete_channels], {})
+    if isinstance(D_smooth, type(None)):
+        D_smooth = get_D_smooth(D_binary[~discrete_channels])
+    else:
+        D_smooth = D_smooth[~discrete_channels]
+    D_binary[~discrete_channels] = D_smooth
+    D_binary[~discrete_channels] = ana.apply_method_to_all_features(D_binary[~discrete_channels], filt.flatten, {"threshold": th, "do_std": True, "do_centre": True})
+    return D_binary
+
+def transform_to_quantized_form(D, discrete_channels, binary_channels, n=MAXDISCRETE, D_smooth=None):
+    D_quantized = np.copy(D)
+    if isinstance(D_smooth, type(None)):
+        D_smooth = get_D_smooth(D_quantized)
+    D_quantized = D_smooth
+    for i in range(D.shape[0]):
+        ps = np.concatenate([[-np.inf], np.nanquantile(D_quantized[i, :], q=np.arange(n-1)/(n-2)), [np.inf]])
+        for j in range(1, len(ps)):
+            floor = ps[j-1]
+            ceil = ps[j]
+            bin_mask = (D_quantized[i, :] > floor + np.finfo(np.float64).eps) & (D_quantized[i, :] <= ceil)
+            unique_values = len(np.unique(D_quantized[i, bin_mask]))
+            quantized_value = np.nanmedian(D_quantized[i, bin_mask])
+            if unique_values > 0:
+                D_quantized[i, bin_mask] = quantized_value
+    return D_quantized
+
+def transform_to_thresholded(D, discrete_channels, binary_channels, th=1, D_smooth=None):
+    D_thresholded = np.copy(D)
+    if isinstance(D_smooth, type(None)):
+        D_smooth = get_D_smooth(D_thresholded[~discrete_channels])
+    else:
+        D_smooth = D_smooth[~discrete_channels]
+    D_thresholded[~discrete_channels] = D_smooth
+    D_thresholded[~discrete_channels] = ana.apply_method_to_all_features(D_thresholded[~discrete_channels], filt.flatten, {"threshold": th, "do_std": True, "do_centre": True, "side": "sym"})
+    threshold_mask = D_thresholded > 0
+    D_thresholded[~threshold_mask] = np.nan
+    D_thresholded[threshold_mask] = D[threshold_mask]
+    return D_thresholded
 
 def cut_badrows(D, L):
     nan_filt = np.any(~np.isnan(D) & ~np.isinf(D) & ~np.isclose(D,0), axis=1)

@@ -10,6 +10,7 @@ import io_tools as iot
 import naming_tools as nt
 import filtering as filt
 import analysis as ana
+import data_logger as dl
 
 def sanitize_labels(labels, tag=""):
     labels = npw.string_array(labels)
@@ -29,14 +30,14 @@ def save_figure(title, subfolder=None, overwrite=True):
     savepath = iot.figs_path()
     if not isinstance(subfolder, type(None)):
         savepath = iot.figs_path() / f"{subfolder}"
-    iot.create_missing_folder(savepath)
+    iot.create_missing_folder_recursive(savepath)
     fullsavepath = savepath / f"{safe_title}.png"
     if overwrite or not fullsavepath.exists():
         plt.savefig(fullsavepath, dpi=300, bbox_inches="tight")
         plt.clf()
         plt.close()
 
-def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, zero_mode=False, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False, savefig=False, overwrite=True, subfolder=None):
+def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, zero_mode=False, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False):
     labels = npzr.anonymize_speakers(labels)
     relationship_filter = npzr.has(labels, nt.ANNOTATION_TAG) & ~npzr.has(labels, npw.SPEAKERS)
     S1_filter = npzr.has(labels, npw.SPEAKER1) & relationship_filter
@@ -68,14 +69,14 @@ def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, ze
         D1_common, L_common = npzr.reorder_data(D1_common, L_common)
         D2_common, L_common = npzr.reorder_data(D2_common, L_common)
 
-    cc(D1_common, L_common, npw.SPEAKER1, fig=fig, ax=ax1, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
-    cc(D2_common, L_common, npw.SPEAKER2, fig=fig, ax=ax2, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar)
+    cc(D1_common, L_common, npw.SPEAKER1, fig=fig, ax=ax1, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar, time=time, dominutelines=dominutelines)
+    cc(D2_common, L_common, npw.SPEAKER2, fig=fig, ax=ax2, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar, time=time, dominutelines=dominutelines)
     if savefig:
         save_figure(title, subfolder=subfolder, overwrite=overwrite)
     else:
         plt.show()
 
-def cc(data, labels, title, reorder=True, rescale_rows=True, zero_mode=False, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True, subfolder=None):
+def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False):
     individual = fig == None or ax == None
     cmap = None
     if style == "discrete":
@@ -88,13 +89,29 @@ def cc(data, labels, title, reorder=True, rescale_rows=True, zero_mode=False, ma
         cmap = style
     plot_data = data
     plot_labels = labels
-    if rescale_rows == "01":
+    if isinstance(rescale_rows, tuple) or isinstance(rescale_rows, list):
+        vmin = rescale_rows[0]
+        vmax = rescale_rows[1]
+    elif rescale_rows == "0_centre":
+        mag = np.max(np.abs(plot_data))
+        vmin = -mag
+        vmax = mag
+    elif rescale_rows == "01":
         plot_data = filt.to_01(plot_data)
         vmin = 0
         vmax = 1
     elif rescale_rows == "01_both":
-        plot_data[plot_data >= 0] = filt.to_01(np.abs(plot_data[plot_data >= 0]))
-        plot_data[plot_data < 0] = -filt.to_01(np.abs(plot_data[plot_data < 0]))
+        pos_mask = plot_data >= 0
+        neg_mask = plot_data < 0
+        plot_data_pos = np.copy(plot_data)
+        plot_data_pos[plot_data_pos < 0] = 0
+        plot_data_pos = filt.to_01(plot_data_pos)
+        plot_data_neg = -np.copy(plot_data)
+        plot_data_neg[plot_data_neg < 0] = 0
+        plot_data_neg = -filt.to_01(plot_data_neg)
+        plot_data = np.zeros_like(plot_data)
+        plot_data[pos_mask] = plot_data_pos[pos_mask]
+        plot_data[neg_mask] = plot_data_neg[neg_mask]
         vmin = -1
         vmax = 1
     elif rescale_rows == "asym":
@@ -123,11 +140,47 @@ def cc(data, labels, title, reorder=True, rescale_rows=True, zero_mode=False, ma
         fig.set_figwidth(20)
         fig.set_figheight(len(plot_labels)/4)
     cax = ax.imshow(np.atleast_2d(plot_data), cmap=cmap, aspect='auto', interpolation='none', norm=norm, vmin=vmin, vmax=vmax)
-    if colorbar: fig.colorbar(cax)
+    if colorbar == True:
+        colorbar = "vertical"
+    if isinstance(colorbar, str): fig.colorbar(cax, orientation=colorbar, aspect=round(1*len(plot_labels)))
     ax.tick_params(top=False, labeltop=False, bottom=True, labelbottom=True, left=False, labelleft=True, right=False, labelright=False)
     ax.set_title(title)
     if len(plot_labels) > 0:
         ax.set_yticks(np.arange(len(plot_labels)), labels = plot_labels)
+    if time == "mstos":
+        x_lims = ax.get_xlim()
+        labels = ax.get_xticklabels()
+        new_labels = []
+        new_values = []
+        for i in range(len(labels)):
+            val = int(float(labels[i].get_text().replace("−","-")))
+            newval = int(round(val/1000))
+            new_labels.append(f"{newval}".replace("-","−"))
+            new_values.append(labels[i].get_position()[0])
+        ax.set_xticks(new_values)
+        ax.set_xticklabels(new_labels)
+        ax.set_xlim(x_lims)
+    elif time == "mstoms":
+        x_lims = ax.get_xlim()
+        new_labels = []
+        new_values = []
+        minute_lines = []
+        freq = 30000
+        for i in range(int(x_lims[0]) + freq, int(x_lims[1]), freq):
+            new_values.append(i)
+            seconds = int(round(i/1000))
+            minutes = seconds//60
+            seconds = seconds - minutes*60
+            if seconds == 0:
+                minute_lines.append(i)
+            minutes_text = f"{minutes}".rjust(2,"0")
+            seconds_text = f"{seconds}".rjust(2,"0")
+            new_labels.append(f"{minutes_text}:{seconds_text}")
+        if dominutelines:
+            ax.vlines(minute_lines, 0, 1, transform=ax.get_xaxis_transform(), linewidth=0.5, color='cyan')
+        ax.set_xticks(new_values)
+        ax.set_xticklabels(new_labels)
+        ax.set_xlim(x_lims)
     if individual:
         if savefig:
             save_figure(title, subfolder=subfolder, overwrite=overwrite)
@@ -145,16 +198,21 @@ def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15,
     symmetric = False
     if automate_colorscale:
         new_data = np.array(data)
-        new_data[abs(data - np.nanmedian(data)) > 3 * np.std(data)] = np.nan
         centre = np.nanmedian(new_data)
-        mag = np.nanmedian(np.abs(new_data - centre)) * 3
-        top = np.nanmax(data)
-        bot = np.nanmin(data)
+        distance = abs(new_data - centre)
+        new_data[distance > 3 * np.std(new_data)] = np.nan
+        centre = np.nanmedian(new_data)
+        mag = np.nanstd(new_data) * 3
+        top = np.nanmax(new_data)
+        bot = np.nanmin(new_data)
         if isinstance(vmin, type(None)):
             vmin = max(centre - mag, bot)
         if isinstance(vmax, type(None)):
             vmax = min(centre + mag, top)
-        symmetric = centre / mag < 0.2
+        if abs(centre) < np.finfo(np.float32).eps:
+            symmetric = True
+        elif abs(centre) < abs(mag):
+            symmetric = abs(centre) / abs(mag) < 0.2
     cmap = "plasma"
     if symmetric:
         cmap = "berlin"
@@ -341,8 +399,8 @@ def produce_all_figures_turn_taking():
             try:
                 produce_figures_turn_taking(task_name, feature_name, n = 10000, use_density = False)
             except Exception as e:
-                print(f"Failed to produce figure for {task_name} {feature_name}")
-                print(traceback.format_exc())
+                dl.log(f"Failed to produce figure for {task_name} {feature_name}")
+                dl.log(traceback.format_exc())
 
 def produce_all_figures_overall():
     feature_names = npzr.get_all_features()
@@ -351,8 +409,8 @@ def produce_all_figures_overall():
             try:
                 produce_figures_overall(task_name, feature_name)
             except Exception as e:
-                print(f"Failed to produce figure for {task_name} {feature_name}")
-                print(traceback.format_exc())
+                dl.log(f"Failed to produce figure for {task_name} {feature_name}")
+                dl.log(traceback.format_exc())
 
 def produce_all_figures():
     produce_all_figures_turn_taking()

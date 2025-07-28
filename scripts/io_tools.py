@@ -29,6 +29,11 @@ def get_config_public():
     with open((find_config_directory() / 'publicconfig.yml'), 'r') as file:
         return yaml.safe_load(file)
 
+def get_config_version():
+    config = get_config_private()
+    config_version = config["version"]
+    return config_version
+
 def private_data_path(key):
     config = get_config_private()
     personal_path = p.Path(config["paths"]["personal_data"]["."])
@@ -251,9 +256,9 @@ def source_annotated_data_discrete():
         manifest.write(f"FINISHING copy {datetime.now()}\n")
 
 def check_configured(key_name, key_value):
-    print(key_value)
+    dl.log(key_value)
     if "<" in key_value or ">" in key_value:
-        print(f"Key \'{key_name}\' not configured in! (\'{key_value}\')")
+        dl.log(f"Key \'{key_name}\' not configured in! (\'{key_value}\')")
         raise NameError("")
 
 def create_wavs_sr_folder(sr):
@@ -264,7 +269,7 @@ def create_data_folders():
     new_folders = 0
     successful = False
     try:
-        print("Attempting automatic data folder creation.")
+        dl.log("Attempting automatic data folder creation.")
         config = get_config_private()
         personal_data = config["paths"]["personal_data"]
         rootdir = personal_data["."]
@@ -278,16 +283,16 @@ def create_data_folders():
             check_configured(f"subdir:{subdir_key}", subdir)
             subdir_path = rootdir_path / p.Path(subdir)
             if create_missing_folder(subdir_path): new_folders += 1
-        print("Automatic data folder creation succeeded.")
+        dl.log("Automatic data folder creation succeeded.")
         successful = True
     except NameError as ve:
-        print("Automatic data folder creation failed.")
-        print("\tEncountered NameError in creating folders. Has \'privateconfig.yml\' been created and configured?")
+        dl.log("Automatic data folder creation failed.")
+        dl.log("\tEncountered NameError in creating folders. Has \'privateconfig.yml\' been created and configured?")
     except Exception as e:
-        print("Automatic data folder creation failed.")
-        print(traceback.format_exc())
+        dl.log("Automatic data folder creation failed.")
+        dl.log(traceback.format_exc())
     finally:
-        print(f"Total new folders: {new_folders}")
+        dl.log(f"Total new folders: {new_folders}")
     return successful
 
 def create_missing_folder(tgt):
@@ -299,7 +304,7 @@ def create_missing_folder(tgt):
 def create_missing_folder_recursive(tgt):
     if p.Path(tgt).exists():
         return False
-    os.makekdirs(tgt)
+    os.makedirs(tgt)
     return True
 
 def copy_missing(src, tgt, overwrite=False):
@@ -334,7 +339,7 @@ def source_annotated_data_fuzzy(overwrite=False):
             
             manifest.session_end()
         except Exception as e:
-            print(traceback.format_exc())
+            dl.log(traceback.format_exc())
             manifest.error(e)
     manifest.end()
 
@@ -475,12 +480,12 @@ def get_aasis_sessions():
     return get_sessions_from_lists(eaf_list, wav_list, csv_list, mp4_list, pyfeat_csv_list, joystick_csv_list)
 
 def print_sessions():
-    print("Finding Local Sessions...")
+    dl.log("Finding Local Sessions...")
     sessions = get_sessions()
     print_from_sessions(sessions)
 
 def print_aasis_sessions():
-    print("Finding Aasis Sessions...")
+    dl.log("Finding Aasis Sessions...")
     sessions = get_aasis_sessions()
     print_from_sessions(sessions)
 
@@ -488,15 +493,15 @@ def print_from_sessions(sessions):
     for session_key in sessions:
         session = sessions[session_key]
         name = session["name"]
-        print(f"{name}")
+        dl.log(f"{name}")
         for file_key in session:
             file_paths = session[file_key]
             if not isinstance(file_paths, list):
                 continue
-            print(f"\t{file_key}:")
+            dl.log(f"\t{file_key}:")
             for file_path in file_paths:
-                print(f"\t\t{file_path.name} ({file_path.parents[0]})")
-        print()
+                dl.log(f"\t\t{file_path.name} ({file_path.parents[0]})")
+        dl.log()
 
 if __name__ == '__main__':
     globals()[sys.argv[1]]()

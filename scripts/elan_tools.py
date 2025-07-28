@@ -5,6 +5,7 @@ import pandas as pd
 from pympi import Elan as elan
 import io_tools as iot
 import data_reader as dr
+import data_logger as dl
 
 def get_wav_names(eaf):
     wav_names = []
@@ -47,7 +48,7 @@ def eaf_media_scrape():
     df = pd.DataFrame(rows)
     path = iot.special_data_path() / "eaf-to-wav-and-mp4.csv"
     df[sorted(df.columns)].to_csv(path)
-    print(f"Table of annotationa and media correspondence created at {path}")
+    dl.log(f"Table of annotationa and media correspondence created at {path}")
     
 
 if __name__ == '__main__':

@@ -81,7 +81,6 @@ def get_pyfeat_data(csv_name, t_max=None):
     bad_cols = []
     for col in df.columns:
         if (df[col].dtype == "object"):
-            #print(f"Object column found \'{col}\'")
             continue
         if np.sum(~np.isnan(df[col])) == 0:
             bad_cols.append(col)

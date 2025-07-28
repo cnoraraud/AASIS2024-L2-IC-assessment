@@ -25,7 +25,7 @@ def to_0_mode(data, properties={}):
     axis = -1
     if "axis" in properties:
         axis = properties["axis"]
-    return data - mode(data, axis=axis, keepdims=True)
+    return data - mode(data, axis=axis, keepdims=True)[0]
 
 def norm(data, properties={}):
     axis = -1
@@ -48,6 +48,9 @@ def flatten(data, properties = {}):
     do_std = False
     if "do_std" in properties:
         do_std = properties["do_std"]
+    do_centre = False
+    if "do_centre" in properties:
+        do_centre = properties["do_centre"]
     reverse = False
     if "reverse" in properties:
         reverse = properties["reverse"]
@@ -63,11 +66,14 @@ def flatten(data, properties = {}):
         neg_val = -1
     if do_std:
         threshold = threshold * np.nanstd(data)
+    centring_value = 0
+    if do_centre:
+        centring_value = np.median(data)
     flattened_data = np.zeros_like(data)
-    if do_pos and reverse: flattened_data[(data >= 0) & (data <= threshold)] = 1
-    if do_neg and reverse: flattened_data[(data < 0) & (data >= -threshold)] = neg_val
-    if do_pos and not reverse: flattened_data[data >= threshold] = 1
-    if do_neg and not reverse: flattened_data[data <= -threshold] = neg_val
+    if do_pos and reverse: flattened_data[(data - centring_value >= 0) & (data - centring_value <= threshold)] = 1
+    if do_neg and reverse: flattened_data[(data - centring_value < 0) & (data - centring_value >= -threshold)] = neg_val
+    if do_pos and not reverse: flattened_data[data - centring_value >= threshold] = 1
+    if do_neg and not reverse: flattened_data[data - centring_value <= -threshold] = neg_val
     
     return flattened_data
 

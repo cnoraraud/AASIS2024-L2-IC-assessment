@@ -11,7 +11,7 @@ def arg_to_bool(arg):
 if len(sys.argv) > 1:
     arg_string = sys.argv[1]
 
-arg_count = 7
+arg_count = 8
 args = []
 for i in range(arg_count):
     if len(arg_string) <= i:
@@ -26,7 +26,8 @@ joystick = args[2]
 facial = args[3]
 clean_data = args[4]
 summarize = args[5]
-overwrite = args[6]
+statistics = args[6]
+overwrite = args[7]
 
 if overwrite:
     dl.log("Updating all data.")
@@ -55,4 +56,7 @@ if clean_data:
 if summarize:
     dl.log("Started analysing data")
     proc.summarize_all_data(overwrite=overwrite)
+if statistics:
+    dl.log("Started running statistics")
+    proc.run_statistics(overwrite=overwrite, collapse=True)
 dl.log("Finished processing")

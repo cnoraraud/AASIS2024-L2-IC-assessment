@@ -3,6 +3,7 @@ import numpy as np
 import numpy_wrapper as npw
 import naming_tools as nt
 import io_tools as iot
+import data_logger as dl
 
 TEXT_TAG = "<text>"
 LABELLED_TIERS = ["hand", "head", "body", "text"]
@@ -55,7 +56,7 @@ def section_text(text):
 
 def find_text_tokens(text, textual_tokens="ignore", nontextual_tokens = "ignore"):
     if textual_tokens == "ignore" and nontextual_tokens == "ignore":
-        print("Ignoring both textual and non-textual text! Is this what you wanted to do?")
+        dl.log("Ignoring both textual and non-textual text! Is this what you wanted to do?")
         return ""
     
     sections = section_text(text)
@@ -128,22 +129,26 @@ def sanitize_text(text, collapse_languages = True):
             ["<gabage>",
              "<garbage>",
              "<gargbage>",
+             "<garbege>",
              "<unk>",
              "<other>"
              "<bgnoise>"],
         "<laughing>":
             ["<laugh>",
-             "<laughin>"],
+             "<laughin>",
+             "<laught>"],
         "<hesitation>":
             ["<hesitaiton>",
              "<hestitation>",
              "<hesiation>",
              "<heistation>",
-             "<hesitiation>"],
+             "<hesitiation>",
+             "<hesitaion>",
+             "<hesittaion>"],
         "<paral>":
             ["<para>"]
     }
-
+     
     for substitution in substitution_map:
         if substitution == "<trans>" and not collapse_languages:
             continue
@@ -191,7 +196,7 @@ BLOCK_LIST = ["text:other", "text:hesitationhesitation", "hand:other", "text:bgn
 def block_listed(key, name="unknown eaf"):
     for block in BLOCK_LIST:
         if block in key:
-            print(f"Ignoring label \'{block}\' while processing \'{name}\' based on block-list.")
+            dl.log(f"Ignoring label \'{block}\' while processing \'{name}\' based on block-list.")
             return True
     return False
 
