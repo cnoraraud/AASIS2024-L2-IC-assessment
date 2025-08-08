@@ -9,11 +9,12 @@ import wav_reader as wavr
 import csv_reader as csvr
 import npz_reader as npzr
 import npy_reader as npyr
-import data_displayer as dd
-import io_tools as iot
-import data_logger as dl
-import naming_tools as nt
 import experiment_runner as expr
+import experiment_analyzer as expa
+import data_displayer as dd
+import data_logger as dl
+import io_tools as iot
+import naming_tools as nt
 
 def source_data(overwrite=False):
     dl.log("Started creationg folders based on config")
@@ -41,9 +42,18 @@ def run_analysis(overwrite=True):
     dl.log("Started analysing data")
     summarize_all_data(overwrite=overwrite)
 
+#[["SpeakerID"], ["holistic_cefr"], ["Score"]]
 def run_statistics(overwrite=True, collapse=True):
     dl.log("Started gathering statistics")
-    expr.run_statistics(overwrite=overwrite, collapse=collapse, groupings=[["SpeakerID"], ["holistic_cefr"], ["Score"]], tasks=["task5"])
+    expr.run_statistics(overwrite=overwrite, collapse=collapse, 
+                        groupings=[["SpeakerID"], ["holistic_cefr"], ["Score"]],
+                        tasks=["task5"],
+                        test_reactive_features=True, test_proactive_features=True,
+                        test_pairwise=True, test_intragroup=True, test_nwise=True)
+    
+def run_master_table_creation():
+    dl.log("Started creating master tabel")
+    expa.create_master_tables(tasks=["5"], group_keywords=["collapsed"])
     
 def data_pipeline(overwrite=True):
     source_data(overwrite=overwrite)
@@ -52,6 +62,7 @@ def data_pipeline(overwrite=True):
     preprocess_data(overwrite=overwrite)
     run_analysis(overwrite=overwrite)
     run_statistics(overwrite=overwrite)
+    run_master_table_creation()
     dl.log("Finished processing")
 
 def get_prints_data(key, row, wavs, overwrite=True):

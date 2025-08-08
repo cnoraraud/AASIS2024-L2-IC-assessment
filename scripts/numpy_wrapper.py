@@ -1,12 +1,5 @@
 import numpy as np
 
-SPEAKER_SELF = "self"
-SPEAKER_OTHER = "other"
-SPEAKER1 = "S001"
-SPEAKER2 = "S002"
-SPEAKERS = "[all]"
-SPEAKERNONE = "[none]"
-
 def is_string(value):
     return isinstance(value, str) or isinstance(value, np.str_)
 
@@ -15,25 +8,6 @@ def is_int(value):
 
 def is_float(value):
     return isinstance(value, float) or isinstance(value, np.floating)
-
-def is_speaker_related(speaker, value):
-    check_substring = value.split(" ")[0]
-    if speaker in check_substring: return True
-    if SPEAKERS in check_substring: return True
-    return False
-
-def get_speakers():
-    return [SPEAKER1, SPEAKER2]
-
-def get_speakers_all():
-    return [SPEAKER1, SPEAKER2, SPEAKERS]
-
-def get_speaker_other(speaker):
-    if speaker == SPEAKER1:
-        return SPEAKER2
-    if speaker == SPEAKER2:
-        return SPEAKER1
-    return SPEAKERNONE
 
 def count_lengths(list_of_a):
     counts = []

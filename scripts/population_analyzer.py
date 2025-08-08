@@ -4,6 +4,7 @@ from scipy import stats
 import pandas as pd
 from functools import reduce
 import data_logger as dl
+import naming_tools as nt
 
 def get_label_name(l1=None, l2=None):
     l1_exists = not isinstance(l1, type(None))
@@ -131,44 +132,61 @@ def add_sample_corrs_to_dict(obj, samples, ratings, rating_names):
 def add_anova_dict(obj):
     obj["anova"] = []
     obj["anova_p"] = []
+    obj["anova_valid"] = []
     obj["ag"] = []
     obj["ag_p"] = []
     obj["ag_valid"] = []
+    obj["kruskal"] = []
+    obj["kruskal_p"] = []
+    obj["kruskal_valid"] = []
 
 def add_sample_anova_to_dict(obj, samples):
     anova_statistic = np.nan
     anova_p_value = np.nan
-    ag_statstics = np.nan
+    ag_statistic = np.nan
     ag_p_value = np.nan
+    kruskal_statistic = np.nan
+    kruskal_p_vlaue = np.nan
 
-    all_valid = True
-    valid_samples = []
+    anova_valid_samples = []
+    ag_valid_samples = []
+    kruskal_valid_samples = []
     for sample in samples:
-        is_valid_dist = npw.valid_dist(sample, total_n=1, unique_n=1)
+        is_valid_dist_for_anova = npw.valid_dist(sample, total_n=1, unique_n=1)
         is_valid_dist_for_ag = npw.valid_dist(sample, total_n=2, unique_n=2)
-        all_valid = all_valid and is_valid_dist
+        is_valid_dist_for_kruskal = npw.valid_dist(sample, total_n=5, unique_n=1)
+        if is_valid_dist_for_anova:
+            anova_valid_samples.append(sample)
         if is_valid_dist_for_ag:
-            valid_samples.append(sample)
+            ag_valid_samples.append(sample)
+        if is_valid_dist_for_kruskal:
+            kruskal_valid_samples.append(sample)
     all_valid = all_valid and npw.valid_dist(np.concat(samples), unique_n=3)
 
-    if len(samples) != len(valid_samples):
-        dl.log( f"Only {len(valid_samples)} out of {len(samples)} were considered for alexander govern analysis.")
-
-    if all_valid:
+    if len(anova_valid_samples) >= 2:
         anova = stats.f_oneway(*samples, nan_policy="omit")
         anova_statistic = anova.statistic
         anova_p_value = anova.pvalue
-        ag = stats.alexandergovern(*valid_samples, nan_policy="omit")
-        ag_statstics = ag.statistic
+    if len(ag_valid_samples) >= 2:
+        ag = stats.alexandergovern(*ag_valid_samples, nan_policy="omit")
+        ag_statistic = ag.statistic
         ag_p_value = ag.pvalue
+    if len(kruskal_valid_samples) >= 2:
+        kruskal = stats.kruskal(*kruskal_valid_samples, nan_policy="omit")
+        kruskal_statistic = kruskal.statistic
+        kruskal_p_value = kruskal.pvalue
     
     obj["anova"].append(anova_statistic)
     obj["anova_p"].append(anova_p_value)
-    obj["ag"].append(ag_statstics)
+    obj["anova_valid"].append(len(anova_valid_samples))
+    obj["ag"].append(ag_statistic)
     obj["ag_p"].append(ag_p_value)
-    obj["ag_valid"].append(len(valid_samples))
+    obj["ag_valid"].append(len(ag_valid_samples))
+    obj["kruskal"].append(kruskal_statistic)
+    obj["kruskal_p"].append(kruskal_p_value)
+    obj["kruskal_valid"].append(len(kruskal_valid_samples))
 
-def pairwise_comparison_self(L1, L2, Ms, names, ratings, properties = {}):
+def pairwise_comparison_proactive(L1, L2, Ms, names, ratings, properties = {}):
     obj = base_dict()
     add_welchttest_dict(obj)
     add_description_dict(obj, names)
@@ -183,7 +201,7 @@ def pairwise_comparison_self(L1, L2, Ms, names, ratings, properties = {}):
         add_sample_descriptions_to_dict(obj, samples, names)
     return dataframe_object(obj, "welch_ttest_p")
 
-def pairwise_comparison_relational(L1, L2, Ms, names, ratings, properties = {}):
+def pairwise_comparison_reactive(L1, L2, Ms, names, ratings, properties = {}):
     obj = base_dict()
     add_welchttest_dict(obj)
     add_description_dict(obj, names)
@@ -199,7 +217,7 @@ def pairwise_comparison_relational(L1, L2, Ms, names, ratings, properties = {}):
             add_sample_descriptions_to_dict(obj, samples, names)
     return dataframe_object(obj, "welch_ttest_p")
 
-def speakerwise_comparison_self(L1, L2, Ms, names, ratings, properties = {}):
+def intragroup_comparison_proactive(L1, L2, Ms, names, ratings, properties = {}):
     rating_names = properties["rating_names"]
     obj = base_dict()
     add_corrs_dict(obj, rating_names)
@@ -218,7 +236,7 @@ def speakerwise_comparison_self(L1, L2, Ms, names, ratings, properties = {}):
         add_sample_corrs_to_dict(obj, np.array(samples), ratings, rating_names)
     return dataframe_object(obj)
 
-def speakerwise_comparison_relational(L1, L2, Ms, names, ratings, properties = {}):
+def intragroup_comparison_reactive(L1, L2, Ms, names, ratings, properties = {}):
     rating_names = properties["rating_names"]
     obj = base_dict()
     add_corrs_dict(obj, rating_names)
@@ -236,7 +254,7 @@ def speakerwise_comparison_relational(L1, L2, Ms, names, ratings, properties = {
             add_sample_corrs_to_dict(obj, np.array(samples), ratings, rating_names)
     return dataframe_object(obj)
 
-def nwise_comparison_self(L1, L2, Ms, names, ratings, properties = {}):
+def nwise_comparison_proactive(L1, L2, Ms, names, ratings, properties = {}):
     obj = base_dict()
     add_anova_dict(obj)
     add_description_dict(obj, names)
@@ -251,7 +269,7 @@ def nwise_comparison_self(L1, L2, Ms, names, ratings, properties = {}):
         add_sample_descriptions_to_dict(obj, samples, names)
     return dataframe_object(obj, "anova_p")
 
-def nwise_comparison_relational(L1, L2, Ms, names, ratings, properties = {}):
+def nwise_comparison_reactive(L1, L2, Ms, names, ratings, properties = {}):
     obj = base_dict()
     add_anova_dict(obj)
     add_description_dict(obj, names)
@@ -286,8 +304,8 @@ def compare_groupings(results, method, properties = {}):
             N = len(res["sessions"])
         if N == 0:
             continue
-        L1 = res["self_labels"]
-        L2 = res["other_labels"]
+        L1 = res[nt.INIT_L_KEY]
+        L2 = res[nt.RESP_L_KEY]
         L1s.append(L1)
         L2s.append(L2)
     
@@ -305,8 +323,8 @@ def compare_groupings(results, method, properties = {}):
             continue
         name = res["name"]
         M = res["matrix"]
-        L1 = res["self_labels"]
-        L2 = res["other_labels"]
+        L1 = res[nt.INIT_L_KEY]
+        L2 = res[nt.RESP_L_KEY]
 
         M_mod = M[np.ix_(np.full(M.shape[0], True), np.isin(L1, L1c), np.isin(L2, L2c))]
         M_mod = np.reshape(M_mod, (M.shape[0], len(L1c), len(L2c)))

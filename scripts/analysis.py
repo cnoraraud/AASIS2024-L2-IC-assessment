@@ -6,6 +6,7 @@ import npz_reader as npzr
 import filtering as filt
 import analysis as ana
 import data_logger as dl
+import naming_tools as nt
 
 def apply_method_to_feature(data, method, properties = {}):
     return method(data, properties = properties)
@@ -83,7 +84,7 @@ def turn_taking_times_comparative(D, L, n=5000, use_density=False):
     L_filter = npzr.has(L,"text:text") & npzr.double_speaker_filter(L)
     D, L = npzr.do_label_select(D, L, L_filter)
     if np.size(L) < 2:
-        return np.zeros(0), np.full(0, npw.SPEAKERNONE)
+        return np.zeros(0), np.full(0, nt.SPEAKERNONE)
     silence_mask = np.sum(D, axis=0) == 0.0
     if use_density: D = ana.apply_method_to_all_features(D, filt.to_density, {})
     D = ana.apply_method_to_all_features(D, filt.to_01, {})
@@ -94,8 +95,8 @@ def turn_taking_times_comparative(D, L, n=5000, use_density=False):
     diff = np.diff(S1_larger)
     times = np.where(diff != 0)[0]
     S1_starting = diff[times] > 0
-    starting = np.full(times.shape, npw.SPEAKER2)
-    starting[S1_starting] = npw.SPEAKER1
+    starting = np.full(times.shape, nt.SPEAKER2)
+    starting[S1_starting] = nt.SPEAKER1
     return times, starting
 
 def find_pearsonr(a, l, properties):

@@ -135,12 +135,14 @@ def get_adjusted_ratings(ratings, target_columns, ignore_columns, anchors_only=T
     df_adjusted_ratings = df_adjusted.drop(columns = ["rater"]).groupby(by=["task","speaker"]).mean().reset_index()
     return df_adjusted_ratings
 
+non_verbal_columns = ["face", "eye_contact", "head", "vocalizing", "if_contributed"]
 def get_speaker_nonverbals(tasks, anchors_only=True):
-    nonverbal_adjusted_ratings = get_adjusted_ratings(get_nonverbal_ratings_dataframe(), ["face", "eye_contact", "head", "vocalizing", "if_contributed"], ["question_ind", "other_comment","feature_comment","impact_comment","one_row"], anchors_only=anchors_only)
+    nonverbal_adjusted_ratings = get_adjusted_ratings(get_nonverbal_ratings_dataframe(), non_verbal_columns, ["question_ind", "other_comment","feature_comment","impact_comment","one_row"], anchors_only=anchors_only)
     return ratings_to_speakers(nonverbal_adjusted_ratings, tasks), nonverbal_adjusted_ratings
 
+cefr_columns = ["holistic", "range", "accuracy", "fluency", "pronunciation", "turn_taking"]
 def get_speaker_cefrs(tasks, anchors_only=True):
-    cefr_adjusted_ratings = get_adjusted_ratings(get_cefr_ratings_dataframe(), ["holistic", "range", "accuracy", "fluency", "pronunciation", "turn_taking"], ["task_type", "question_ind","comment","one_row"], anchors_only=anchors_only)
+    cefr_adjusted_ratings = get_adjusted_ratings(get_cefr_ratings_dataframe(), cefr_columns, ["task_type", "question_ind","comment","one_row"], anchors_only=anchors_only)
     return ratings_to_speakers(cefr_adjusted_ratings, tasks), cefr_adjusted_ratings
 
 def get_speakers_samples_full_dataframe(tasks, anchors_only=True):

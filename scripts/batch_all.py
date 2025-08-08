@@ -11,7 +11,7 @@ def arg_to_bool(arg):
 if len(sys.argv) > 1:
     arg_string = sys.argv[1]
 
-arg_count = 8
+arg_count = 9
 args = []
 for i in range(arg_count):
     if len(arg_string) <= i:
@@ -27,7 +27,8 @@ facial = args[3]
 clean_data = args[4]
 summarize = args[5]
 statistics = args[6]
-overwrite = args[7]
+table = args[7]
+overwrite = args[8]
 
 if overwrite:
     dl.log("Updating all data.")
@@ -59,4 +60,7 @@ if summarize:
 if statistics:
     dl.log("Started running statistics")
     proc.run_statistics(overwrite=overwrite, collapse=True)
+if table:
+    dl.log("Started master table creation")
+    proc.run_master_table_creation()
 dl.log("Finished processing")

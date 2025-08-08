@@ -39,9 +39,9 @@ def save_figure(title, subfolder=None, overwrite=True):
 
 def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, zero_mode=False, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False):
     labels = npzr.anonymize_speakers(labels)
-    relationship_filter = npzr.has(labels, nt.ANNOTATION_TAG) & ~npzr.has(labels, npw.SPEAKERS)
-    S1_filter = npzr.has(labels, npw.SPEAKER1) & relationship_filter
-    S2_filter = npzr.has(labels, npw.SPEAKER2) & relationship_filter
+    relationship_filter = npzr.has(labels, nt.ANNOTATION_TAG) & ~npzr.has(labels, nt.SPEAKERS)
+    S1_filter = npzr.has(labels, nt.SPEAKER1) & relationship_filter
+    S2_filter = npzr.has(labels, nt.SPEAKER2) & relationship_filter
     D1, L1  = npzr.do_label_select(data, labels, S1_filter)
     D2, L2 = npzr.do_label_select(data, labels, S2_filter)
     L1 = npzr.strip_label_slots(L1)
@@ -69,8 +69,8 @@ def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, ze
         D1_common, L_common = npzr.reorder_data(D1_common, L_common)
         D2_common, L_common = npzr.reorder_data(D2_common, L_common)
 
-    cc(D1_common, L_common, npw.SPEAKER1, fig=fig, ax=ax1, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar, time=time, dominutelines=dominutelines)
-    cc(D2_common, L_common, npw.SPEAKER2, fig=fig, ax=ax2, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar, time=time, dominutelines=dominutelines)
+    cc(D1_common, L_common, nt.SPEAKER1, fig=fig, ax=ax1, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar, time=time, dominutelines=dominutelines)
+    cc(D2_common, L_common, nt.SPEAKER2, fig=fig, ax=ax2, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar, time=time, dominutelines=dominutelines)
     if savefig:
         save_figure(title, subfolder=subfolder, overwrite=overwrite)
     else:
@@ -181,13 +181,30 @@ def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, m
         ax.set_xticks(new_values)
         ax.set_xticklabels(new_labels)
         ax.set_xlim(x_lims)
+    elif time == "none":
+        ax.set_xticks([])
+        ax.set_xticklabels([])
     if individual:
         if savefig:
             save_figure(title, subfolder=subfolder, overwrite=overwrite)
         else:
             plt.show()
 
-def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15, height=15, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True, savefig=False, overwrite=True, automate_colorscale=True, subfolder=None):
+def max_string_length(labels):
+    max_length = 0
+    for label in labels:
+        max_length = max(max_length, len(label))
+    return max_length
+
+def label_rotation(max_str_length, width, count):
+    w_ratio = (max_str_length - width) / width
+    c_ratio = count*5
+    ratio_angle = w_ratio * c_ratio
+    clipped_angle = max(0,min(90, ratio_angle))
+    snap = 15
+    return round(clipped_angle / snap) * snap
+
+def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15, height=15, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True, savefig=False, overwrite=True, automate_colorscale=True, zero_centre=False, subfolder=None, annotate=False, normalize=None, y_label=None, x_label=None):
     individual = fig == None or ax == None
     if individual:
         fig, (ax) = plt.subplots(1, 1)
@@ -195,10 +212,23 @@ def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15,
         fig.set_figheight(height)
     if isinstance(labels_top, type(None)):
         labels_top = labels
+    if normalize == "y":
+        data = data/data.sum(axis=0, keepdims=True)
+    elif normalize == "x":
+        data = data/data.sum(axis=1, keepdims=True)
+    elif normalize == "all":
+        data = data/data.sum(keepdims=True)
+    data = np.nan_to_num(data)
+
     symmetric = False
+    vmin = data.min()
+    vmax = data.max()
     if automate_colorscale:
         new_data = np.array(data)
-        centre = np.nanmedian(new_data)
+        if zero_centre:
+            centre = 0
+        else:
+            centre = np.nanmedian(new_data)
         distance = abs(new_data - centre)
         new_data[distance > 3 * np.std(new_data)] = np.nan
         centre = np.nanmedian(new_data)
@@ -214,15 +244,40 @@ def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15,
         elif abs(centre) < abs(mag):
             symmetric = abs(centre) / abs(mag) < 0.2
     cmap = "plasma"
+    cols = ["white","black"]
     if symmetric:
         cmap = "berlin"
+        cols = ["white","black"]
     cax = ax.imshow(data, cmap=cmap, aspect='equal', interpolation='none', vmin=vmin, vmax=vmax)
     if colorbar: fig.colorbar(cax)
     ax.tick_params(top=False, labeltop=labeltop, bottom=False, labelbottom=False, left=False, labelleft=labelleft, right=False, labelright=False)
-    ax.set_xticks(np.arange(len(labels_top)))
-    ax.set_yticks(np.arange(len(labels)))
-    ax.set_xticklabels(labels_top, rotation=90, ha='left')
+    x_pos = np.arange(len(labels_top))
+    y_pos = np.arange(len(labels))
+    ax.set_xticks(x_pos)
+    ax.set_yticks(y_pos)
+    rotation = label_rotation(max_string_length(labels_top), width, len(labels_top))
+    ax.set_xticklabels(labels_top, rotation=rotation, ha='left')
     ax.set_yticklabels(labels)
+    if annotate:
+        for i in y_pos:
+            for j in x_pos:
+                c_i = 0
+                if symmetric:
+                    if data[i, j] > vmax/2 or data[i, j] < vmin/2:
+                        c_i = 1
+                else:
+                    if data[i, j] > vmax/2:
+                        c_i = 1
+                val = data[i, j]
+                if isinstance(val, float):
+                    val_text = f"{val:.2f}"
+                else:
+                    val_text = f"{val}"
+                text = ax.text(j, i, val_text, ha="center", va="center", color=cols[c_i])
+    if npw.is_string(x_label):
+        ax.set_xlabel(x_label)
+    if npw.is_string(y_label):
+        ax.set_ylabel(y_label)  
     ax.set_title(title)
     if individual:
         if savefig:
@@ -230,6 +285,37 @@ def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15,
         else:
             plt.show()
 
+def s(x, datas, title, save_fig=False, x_label=None, y_label=None, width=15, height=15, fig = None, ax = None, xlim=None, ylim=None, overwrite=True, subfolder=None, savefig=False):
+    individual = fig == None or ax == None
+    if individual:
+        fig, (ax) = plt.subplots(1, 1)
+        fig.set_figwidth(width)
+        fig.set_figheight(height)
+    
+    if not isinstance(datas, dict):
+        datas = {"data": {"y": datas, "c":"blue"}}
+    
+    for data_key in datas:
+        data = datas[data_key]
+        y = data["y"]
+        c = data["c"]
+        label = None
+        if "name" in data:
+            label = data["name"]
+        cax = ax.scatter(x, y, s=2, c=c, label=label)
+    ax.set_title(title)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    if npw.is_string(x_label):
+        ax.set_xlabel(x_label)
+    if npw.is_string(y_label):
+        ax.set_ylabel(y_label)  
+
+    if individual:
+        if savefig:
+            save_figure(title, subfolder=subfolder, overwrite=overwrite)
+        else:
+            plt.show()
 def plot_line(y, color, n=500, label="", smooth=False, x=None, alpha=1):
     if np.size(y) == 0:
         return
@@ -393,9 +479,9 @@ def produce_figures_overall(task_name, feature_name):
     plot_feature(plt_data, task_name, x_is_ratio=True, force_scale=True, save_fig=True, subfolder=f"overall\\{task_name}")
 
 def produce_all_figures_turn_taking():
-    feature_names = npzr.get_all_features()
+    channel_names = npzr.get_all_channels()
     for task_name in ["task5","task4A","task4B"]:
-        for feature_name in feature_names:
+        for feature_name in channel_names:
             try:
                 produce_figures_turn_taking(task_name, feature_name, n = 10000, use_density = False)
             except Exception as e:
@@ -403,9 +489,9 @@ def produce_all_figures_turn_taking():
                 dl.log(traceback.format_exc())
 
 def produce_all_figures_overall():
-    feature_names = npzr.get_all_features()
+    channel_names = npzr.get_all_channels()
     for task_name in ["task5","task4A","task4B"]:
-        for feature_name in feature_names:
+        for feature_name in channel_names:
             try:
                 produce_figures_overall(task_name, feature_name)
             except Exception as e:

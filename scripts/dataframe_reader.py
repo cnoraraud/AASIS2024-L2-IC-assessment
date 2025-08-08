@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import numpy_wrapper as npw
 import data_logger as dl
+import naming_tools as nt
 
 def get_speaker_groups(speakers, columns):
     if isinstance(columns, str):
@@ -54,10 +55,10 @@ def find_sample_groupings(groups, samples):
                 S = None
                 suffix = ""
                 if speaker_sample["speaker_1"] == speaker:
-                    S = npw.SPEAKER1
+                    S = nt.SPEAKER1
                     suffix = "_1"
                 if speaker_sample["speaker_2"] == speaker:
-                    S = npw.SPEAKER2
+                    S = nt.SPEAKER2
                     suffix = "_2"
                 ratings_obj = {}
                 for rating_key, rating_value in speaker_sample.items():
@@ -154,9 +155,10 @@ def add_partner_id(speakers, samples):
         other_speakers.append(other_id)
     speakers["OtherSpeakerID"] = other_speakers
 
+CEFR_ORDER = ["A1","A2","B1","B2","C1","C2"]
 def num_to_cefr(series):
     group_map = {1: "A1", 2: "A2", 3: "B1", 4: "B2", 5: "C1", 6: "C2"}
-    return series.round(0).astype('Int64').map(group_map)
+    return series.round(0).clip(1, 6).astype('Int64').map(group_map)
 
 def cefr_to_num(series):
     group_map = {"A1": 1, "A2": 2, "B1": 3, "B2": 4, "C1": 5, "C2": 6}

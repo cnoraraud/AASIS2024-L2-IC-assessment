@@ -113,7 +113,7 @@ def anonymize_speakers(labels):
                 dl.log("\t- One speaker always even numbered, the other always odd")
         new_source = nt.compact_sources(anon_sources, plural_nicks=True)
         tag = nt.find_tag(label)
-        feature = nt.find_feature(label)
+        feature = nt.find_channel(label)
         extra = nt.find_extra(label)
         new_label = nt.create_label(new_source, tag, feature, extra)
         new_labels.append(new_label)
@@ -134,8 +134,8 @@ def strip_label_slots(labels, slots=[0, 1]):
 
 def extract_speakers_DLs(data, labels):
     labels = anonymize_speakers(labels)
-    S1_filter = has(labels, npw.SPEAKER1)
-    S2_filter = has(labels, npw.SPEAKER2)
+    S1_filter = has(labels, nt.SPEAKER1)
+    S2_filter = has(labels, nt.SPEAKER2)
     D1, L1 = do_label_select(data, labels, S1_filter)
     D2, L2 = do_label_select(data, labels, S2_filter)
     L1 = strip_label_slots(L1)
@@ -164,7 +164,7 @@ def dual_speaker_DLs(data, labels):
     return Ds[0], Ds[1], L_common
 
 def double_speaker_filter(labels):
-    return ~(has(labels, npw.SPEAKER1) & has(labels, npw.SPEAKER2))
+    return ~(has(labels, nt.SPEAKER1) & has(labels, nt.SPEAKER2))
 
 def DL_info(D, L):
     return f"{D.shape}"
@@ -340,7 +340,7 @@ def get_data_segments(D, L, segments: list):
         labels = copy.deepcopy(L)
         data = copy.deepcopy(D[:,start:end])
         starting_speaker = segment["speaker"]
-        ending_speaker = npw.get_speaker_other(starting_speaker)
+        ending_speaker = nt.get_speaker_other(starting_speaker)
         labels = replace_labels(labels, starting_speaker, "new_speaker")
         labels = replace_labels(labels, ending_speaker, "old_speaker")
         data, labels = reorder_data(data, labels)
@@ -535,12 +535,12 @@ def running_combined_segment_matrix(segments):
         support_matrix[nan_mask] += 1
     return all_labels, matrix, support_matrix, mid_point
 
-def get_all_features():
-    features = set()
+def get_all_channels():
+    channels = set()
     for npz in npz_list():
         for label in read_DL_from_name(npz)[2].tolist():
-            features.add(nt.find_feature(label))
-    return sorted(list(features))
+            channels.add(nt.find_channel(label))
+    return sorted(list(channels))
 
 MAXDISCRETE = 50
 def identify_data_type(D, L, th=MAXDISCRETE):
