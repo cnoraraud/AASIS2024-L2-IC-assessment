@@ -4,7 +4,6 @@ from collections import Counter
 import pandas as pd
 from matplotlib import pyplot as plt
 import numpy as np
-import numpy_wrapper as npw
 import data_logger as dl
 import naming_tools as nt
 
@@ -95,11 +94,11 @@ def get_grouping_columns():
 
 def language_counts(speakers, key="Second Languages"):
     lc = Counter()
-    for ls in list(speakers[key]):
-        if not isinstance(ls,str):
+    for languages in list(speakers[key]):
+        if not isinstance(languages,str):
             continue
-        for l in ls.split("/"):
-            lc[l] += 1
+        for language in languages.split("/"):
+            lc[language] += 1
     return lc
 
 def get_dummy(df, default="Same", dtype="str"):
@@ -115,7 +114,6 @@ def find_language_counts(speakers):
     for i, speaker_languages in enumerate(zip(speakers["First Languages"], speakers["Second Languages"])):
         first_languages = speaker_languages[0]
         second_languages = speaker_languages[1]
-        count = 0
         second_languages_set = set()
         first_languages_set = set()
         if isinstance(second_languages, str):
@@ -173,7 +171,7 @@ def add_ic_score(speakers):
     score_group = score_group.map(group_map)
     speakers["Score"] = score_group
 
-def add_CEFR_scores(speakers, columns=[]):
+def add_CEFR_scores(speakers, columns=()):
     for col in columns:
         new_col = f"{col}_cefr"
         speakers[new_col] = num_to_cefr(speakers[col])
@@ -188,7 +186,7 @@ def add_partner_relation(speakers):
     speakers_paired = speakers.merge(speakers, how="left", left_on="OtherSpeakerID", right_on="SpeakerID")
     # language addition
     first_language_overlaps = []
-    for i, speaker_pair in speakers_paired.iterrows():
+    for _, speaker_pair in speakers_paired.iterrows():
         l1 = get_languages(speaker_pair["First Languages_x"])
         l2 = get_languages(speaker_pair["First Languages_y"])
         language_overlaps = int(len(set(l1) & set(l2)) > 0)

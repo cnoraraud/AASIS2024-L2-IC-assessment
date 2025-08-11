@@ -10,19 +10,23 @@ import numpy_wrapper as npw
 import traceback
 import data_logger as dl
 
-def list_wavs():
-    wavs = []
-    for name in iot.list_dir(iot.wavs_path(), "wav"):
-        wavs.append(name)
-    return wavs
+
+def wav_names():
+    names = []
+    for name in iot.list_dir_names(iot.wavs_path(), "wav"):
+        names.append(name)
+    return names
+
 
 def merge_to_mono(data):
     # For some audios, one of the channels might be usable for a noise profile
     # At the moment just adding the two channels together
     return np.sum(data, axis=1)
 
+
 def split_to_mono(data):
-    return [data[:,0], data[:,1]]
+    return [data[:, 0], data[:, 1]]
+
 
 def print_wav(wav):
     sr, data, speakers, mics = wav
@@ -33,14 +37,15 @@ def print_wav(wav):
     dl.log(len(speakers))
     plt.show()
 
-def data_to_mfcc(data, window_n, hop_n, rate, first_cep = 1, num_ceps = 12):
+
+def data_to_mfcc(data, window_n, hop_n, rate, first_cep=1, num_ceps=12):
     pad_n = window_n - hop_n
     bg = np.mean(data)
-    padded_data = np.pad(data, (pad_n, 0), mode='constant', constant_values=(bg, bg))
+    padded_data = np.pad(data, (pad_n, 0), mode="constant", constant_values=(bg, bg))
     total_n = padded_data.shape[0]
     window = sig.windows.hann(window_n, sym=True)
     fbank = get_fbank(window_n, rate)
-    
+
     mfccs = []
     i = 0
     while i + window_n <= total_n:
@@ -50,10 +55,13 @@ def data_to_mfcc(data, window_n, hop_n, rate, first_cep = 1, num_ceps = 12):
         magnitude = np.absolute(dct)
         power = np.power(magnitude, 2) * (1 / window_n)
         filter_banks = get_filterbanks(power, fbank)
-        mfcc = fft.dct(filter_banks, type=2, norm='ortho')[first_cep : num_ceps + first_cep]
+        mfcc = fft.dct(filter_banks, type=2, norm="ortho")[
+            first_cep : num_ceps + first_cep
+        ]
         mfccs.append(mfcc)
         i += hop_n
     return np.array(mfccs)
+
 
 def find_wavs_t_max(wavs):
     t_max_proposals = [-1]
@@ -67,19 +75,24 @@ def find_wavs_t_max(wavs):
         name = "unknown_name"
         if len(wavs) > 0:
             name = nt.file_swap(wavs[0]["wav_path"], all=False)
-        dl.log(f"Invalid number of t_max proposals: {len(t_max_proposals)}\n\t{[t_max_proposals]}\n\t{name}")
+        dl.log(
+            f"Invalid number of t_max proposals: {len(t_max_proposals)}\n\t{[t_max_proposals]}\n\t{name}"
+        )
     t_max = max(list(t_max_proposals))
-    if t_max <= 0: t_max = None
+    if t_max <= 0:
+        t_max = None
     return t_max
 
-def data_aggregate(data, ms, samples_per_ms, aggregate='mean'):
+
+def data_aggregate(data, ms, samples_per_ms, aggregate="mean"):
     data_stack = data.reshape(ms, samples_per_ms)
     data_ms = None
-    if aggregate == 'mean':
+    if aggregate == "mean":
         data_ms = np.mean(data_stack, axis=1)
-    if aggregate == 'energy':
+    if aggregate == "energy":
         data_ms = np.sum(np.abs(data_stack), axis=1) / samples_per_ms
     return data_ms
+
 
 def data_to_t_max(data, t_max, fit_policy):
     t_cur = data.shape[0]
@@ -92,7 +105,7 @@ def data_to_t_max(data, t_max, fit_policy):
     justify = "left"
     if fit_policy == "close_enough":
         justify = "centre"
-    
+
     dif = t_max - t_cur
     l_side = 0
     if justify == "left":
@@ -107,21 +120,32 @@ def data_to_t_max(data, t_max, fit_policy):
         if dif <= 2000 or dif < 0:
             if data.ndim == 2:
                 for i in range(data.shape[1]):
-                    data_new[:,i] = filt.fit_to_size(data[:,i], {"t": t_max})
+                    data_new[:, i] = filt.fit_to_size(data[:, i], {"t": t_max})
             else:
                 data_new = filt.fit_to_size(data, {"t": t_max})
         else:
             if data.ndim == 1:
-                data_new[l_side:l_side+t_cur] = data
+                data_new[l_side : l_side + t_cur] = data
             if data.ndim == 2:
-                data_new[l_side:l_side+t_cur,:] = data
+                data_new[l_side : l_side + t_cur, :] = data
 
     return data_new
 
-def wavs_to_data_matrix(wavs, t_max, window_n = 1000, first_cep = 1, num_ceps = 12, left_mics = ["mic1"], right_mics = ["mic2"], gen_mics = ["mic3", "mic4", "mic5"], fit_policy="close_enough"):
+
+def wavs_to_data_matrix(
+    wavs,
+    t_max,
+    window_n=1000,
+    first_cep=1,
+    num_ceps=12,
+    left_mics=("mic1"),
+    right_mics=("mic2"),
+    gen_mics=("mic3", "mic4", "mic5"),
+    fit_policy="close_enough",
+):
     datas = []
     labels = []
-        
+
     # SC, MC, Outcome
     #  1,  1, - wav belongs to single speaker
     #  2,  2, - shared microphone
@@ -154,20 +178,26 @@ def wavs_to_data_matrix(wavs, t_max, window_n = 1000, first_cep = 1, num_ceps = 
             elif mic in gen_mics:
                 speaker = nt.ALL_SOURCE
             else:
-                raise ValueError(f"Unknown mic {mic}. Don't know how to assign it to sources ({SC}).")
+                raise ValueError(
+                    f"Unknown mic {mic}. Don't know how to assign it to sources ({SC})."
+                )
             c_datas = [merge_to_mono(data)]
             c_speakers = [speaker]
             skip_ceps = True
         else:
-            raise ValueError(f"Strange speaker ({SC}) and mic counts ({MC}). {speakers} {mics}")
-        
+            raise ValueError(
+                f"Strange speaker ({SC}) and mic counts ({MC}). {speakers} {mics}"
+            )
+
         for c_data, speaker in zip(c_datas, c_speakers):
             c_data = filt.norm(c_data)
 
-            energy = data_aggregate(c_data, width, hop, aggregate='energy')
+            energy = data_aggregate(c_data, width, hop, aggregate="energy")
             vad = energy_to_vad(energy)
             if not skip_ceps:
-                ceps = data_to_mfcc(c_data, window_n, hop, sr, first_cep = first_cep, num_ceps = num_ceps)
+                ceps = data_to_mfcc(
+                    c_data, window_n, hop, sr, first_cep=first_cep, num_ceps=num_ceps
+                )
 
             # !
             energy = data_to_t_max(energy, t_max, fit_policy=fit_policy)
@@ -187,25 +217,27 @@ def wavs_to_data_matrix(wavs, t_max, window_n = 1000, first_cep = 1, num_ceps = 
 
     return np.array(datas).T, npw.string_array(labels)
 
-def get_fbank(nfft, rate, nfilt = 40):
+
+def get_fbank(nfft, rate, nfilt=40):
     # Cite for MFCC: https://haythamfayek.com/2016/04/21/speech-processing-for-machine-learning.html
     low_freq_mel = 0
-    high_freq_mel = (2595 * np.log10(1 + (rate / 2) / 700))
+    high_freq_mel = 2595 * np.log10(1 + (rate / 2) / 700)
     mel_points = np.linspace(low_freq_mel, high_freq_mel, nfilt + 2)
-    hz_points = (700 * (10**(mel_points / 2595) - 1))
+    hz_points = 700 * (10 ** (mel_points / 2595) - 1)
     bins = np.floor((nfft + 1) * hz_points / rate)
-    
+
     fbank = np.zeros((nfilt, nfft))
     for m in range(1, nfilt + 1):
-        f_m_minus = int(bins[m - 1])   # left
-        f_m = int(bins[m])             # center
-        f_m_plus = int(bins[m + 1])    # right
-    
+        f_m_minus = int(bins[m - 1])  # left
+        f_m = int(bins[m])  # center
+        f_m_plus = int(bins[m + 1])  # right
+
         for k in range(f_m_minus, f_m):
             fbank[m - 1, k] = (k - bins[m - 1]) / (bins[m] - bins[m - 1])
         for k in range(f_m, f_m_plus):
             fbank[m - 1, k] = (bins[m + 1] - k) / (bins[m + 1] - bins[m])
     return fbank
+
 
 def get_filterbanks(power, fbank):
     # Cite for MFCC: https://haythamfayek.com/2016/04/21/speech-processing-for-machine-learning.html
@@ -213,6 +245,7 @@ def get_filterbanks(power, fbank):
     filter_banks = np.where(filter_banks == 0, np.finfo(float).eps, filter_banks)
     filter_banks = 20 * np.log10(filter_banks)
     return filter_banks
+
 
 def energy_to_vad(data):
     dbs = DB(filt.ma(data, {"n": 300}))
@@ -223,25 +256,28 @@ def energy_to_vad(data):
     ms_th = 0.15
     return filt.ma(dbs > th_db, {"n": ms}) > ms_th
 
+
 def resample_wav(wav_name, sr):
     sr0, data0 = wavfile.read((iot.wavs_path() / wav_name).as_posix())
     t0 = np.shape(data0)[0]
     sr1 = sr
-    t1 = round(sr1/sr0 * t0)
-    data1 = sig.resample(data0, t1) # design choice
+    t1 = round(sr1 / sr0 * t0)
+    data1 = sig.resample(data0, t1)  # design choice
     iot.create_wavs_sr_folder(sr)
     wavfile.write((iot.wavs_path(sr) / wav_name).as_posix(), sr1, data1)
     dl.log(f"Resampled from {t0} to {t1}")
     return sr1, data1
 
+
 def read_wav(wav_path, sr):
-    wav_name = nt.file_swap(nt.get_name(wav_path),"wav")
+    wav_name = nt.file_swap(nt.get_name(wav_path), "wav")
     data = None
     if (iot.wavs_path(sr) / wav_name).exists():
         new_sr, data = wavfile.read((iot.wavs_path(sr) / wav_name).as_posix())
     else:
-        new_sr, data  = resample_wav(wav_name, sr)
+        new_sr, data = resample_wav(wav_name, sr)
     return data, new_sr
+
 
 def read_wavs(wav_paths, sr):
     wavs = []
@@ -250,16 +286,19 @@ def read_wavs(wav_paths, sr):
             data, new_sr = read_wav(wav_path, sr=sr)
             speakers = nt.speakers_to_sources(nt.find_speakers(wav_path))
             mics = nt.find_mics(wav_path)
-            wav = {"data": data,
-                    "sr": new_sr,
-                    "speakers": speakers,
-                    "mics": mics,
-                    "wav_path": wav_path}
+            wav = {
+                "data": data,
+                "sr": new_sr,
+                "speakers": speakers,
+                "mics": mics,
+                "wav_path": wav_path,
+            }
             wavs.append(wav)
         except Exception as e:
             dl.log(f"Could not read {wav_path} due to {e}")
             dl.log(traceback.format_exc())
     return wavs
 
+
 def DB(data):
-    return 20*np.log10(data)
+    return 20 * np.log10(data)

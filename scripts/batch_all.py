@@ -3,10 +3,12 @@ import io_tools as iot
 import data_logger as dl
 import sys
 
+
 def arg_to_bool(arg):
     if arg.isnumeric():
         return bool(int(arg))
     return False
+
 
 if len(sys.argv) > 1:
     arg_string = sys.argv[1]

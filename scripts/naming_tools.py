@@ -1,7 +1,6 @@
 import re
 import pathlib as p
 from collections import Counter
-import numpy_wrapper as npw
 
 INIT_L_KEY = "initiator_labels"
 RESP_L_KEY = "responder_labels"
@@ -29,9 +28,9 @@ REACTIVE = "reactive"
 NORMALIZABLE = "normalizable"
 GENERAL = "general"
 
-PROACTIVE_FEATURES_LIST = sorted(['mean_segment_density', 'mean_segment_width', 'segment_count', 'std_segment_density', 'std_segment_width', 'total_segment_mass', 'total_segment_width', 'var_segment_density', 'var_segment_width'])
-REACTIVE_FEATURES_LIST = sorted(['mean_difference', 'mean_times_relative', 'mean_times_from_start', 'mean_times_from_end', 'median_difference', 'median_times_relative', 'median_times_from_start', 'median_times_from_end', 'std_overlap', 'std_delay', 'std_segment_overlap_count', 'std_segment_delay_count', 'std_segment_overlap_ratio', 'std_difference', 'std_times_relative', 'std_times_from_start', 'std_times_from_end', 'count_delay', 'count_overlap', 'mean_delay', 'mean_overlap', 'mean_segment_delay_count', 'mean_segment_overlap_count', 'mean_segment_overlap_ratio', 'median_delay', 'median_overlap', 'median_segment_delay_count', 'median_segment_overlap_count', 'median_segment_overlap_ratio', 'pearson_corr', 'spearman_corr', 'total_overlap'])
-NORMALIZABLE_FEATURES_LIST = sorted(['segment_count', 'total_segment_mass', 'total_segment_width', 'count_delay', 'count_overlap', 'total_overlap'])
+PROACTIVE_FEATURES_LIST = sorted(('mean_segment_density', 'mean_segment_width', 'segment_count', 'std_segment_density', 'std_segment_width', 'total_segment_mass', 'total_segment_width', 'var_segment_density', 'var_segment_width'))
+REACTIVE_FEATURES_LIST = sorted(('mean_difference', 'mean_times_relative', 'mean_times_from_start', 'mean_times_from_end', 'median_difference', 'median_times_relative', 'median_times_from_start', 'median_times_from_end', 'std_overlap', 'std_delay', 'std_segment_overlap_count', 'std_segment_delay_count', 'std_segment_overlap_ratio', 'std_difference', 'std_times_relative', 'std_times_from_start', 'std_times_from_end', 'count_delay', 'count_overlap', 'mean_delay', 'mean_overlap', 'mean_segment_delay_count', 'mean_segment_overlap_count', 'mean_segment_overlap_ratio', 'median_delay', 'median_overlap', 'median_segment_delay_count', 'median_segment_overlap_count', 'median_segment_overlap_ratio', 'pearson_corr', 'spearman_corr', 'total_overlap'))
+NORMALIZABLE_FEATURES_LIST = sorted(('segment_count', 'total_segment_mass', 'total_segment_width', 'count_delay', 'count_overlap', 'total_overlap'))
 
 COLLAPSE_INITIATOR_LIST = sorted(PROACTIVE_FEATURES_LIST)
 COLLAPSE_RESPONDER_LIST = sorted(REACTIVE_FEATURES_LIST)
@@ -51,8 +50,10 @@ def get_feature_type(feature):
 
 def is_speaker_related(speaker, value):
     check_substring = value.split(" ")[0]
-    if speaker in check_substring: return True
-    if SPEAKERS in check_substring: return True
+    if speaker in check_substring:
+        return True
+    if SPEAKERS in check_substring:
+        return True
     return False
 
 def switch_label_speaker(label, speaker):
@@ -200,7 +201,8 @@ def find_version(name):
 def find_channel(label):
     slots = label.split(" ")
     candidate = get_at_most_nth(slots, 3)
-    if candidate: return candidate
+    if candidate:
+        return candidate
     return "unknown_feature"
 
 def find_tag(label):
@@ -292,10 +294,14 @@ def find_best_candidate(candidates):
     return best
 
 def compact_sources(sources, plural_nicks = False):
-    if len(sources) == 1: return sources[0]
-    if plural_nicks and len(sources) == 0: return SPEAKERNONE
-    if plural_nicks and len(sources) > 1: return SPEAKERS
-    if len(sources) == 0: return ""
+    if len(sources) == 1:
+        return sources[0]
+    if plural_nicks and len(sources) == 0:
+        return SPEAKERNONE
+    if plural_nicks and len(sources) > 1:
+        return SPEAKERS
+    if len(sources) == 0:
+        return ""
     return "-".join(sorted(list(set(sources))))
 
 def find_extra(label):

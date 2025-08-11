@@ -1,5 +1,5 @@
-version: "0.1.6"
-date: "2025/04/09"
+version: "0.1.8"
+date: "2025/08/08"
 paths:
   main_data:
     .: "<root dir>"
@@ -13,9 +13,9 @@ paths:
   personal_data:
     .: "<root dir>"
     wavs: "<sub dir>"
-    eafs: "<sub dir>"
-    npsz: "<sub dir>"
-    npys: "<sub dir>"
+    annotation_eafs: "<sub dir>"
+    DL_npzs: "<sub dir>"
+    summary_npys: "<sub dir>"
     csvs: "<sub dir>"
     mp4s: "<sub dir>"
     figs: "<sub dir>"

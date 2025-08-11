@@ -6,35 +6,43 @@ import os
 
 pid = os.getpid()
 
-def tstring(log_string, l=1):
+
+def tstring(log_string, level=1):
     today = datetime.now()
     fs = " "
-    if l == 0:
+    if level == 0:
         today = ""
         fs = ""
-    tabs = "\t"*l
+    tabs = "\t" * level
     return f"[p{pid}] {tabs}{today}{fs}{log_string}"
+
 
 def tprint(log_string):
     print(tstring(log_string))
+
 
 def log(log_string):
     tprint(log_string)
     write_to_manifest_log(DEBUG_TYPE, log_string)
 
+
 def log_stack(log_string=None):
     if not isinstance(log_string, type(None)):
         log(log_string)
     log(traceback.format_exc())
-    
+
+
 def hand_base(name, mtime):
     return f"{name} (m: {mtime})"
 
-def twrite(manifest, log_string, l=1):
-    manifest.write(f"{tstring(log_string, l=l)}\n")
+
+def twrite(manifest, log_string, level=1):
+    manifest.write(f"{tstring(log_string, level=level)}\n")
+
 
 def open_manifest(manifest_type):
     return open(iot.manifests_path() / f"{manifest_type}_manifest.txt", "a")
+
 
 COPY_TYPE = "copy"
 DATA_TYPE = "data_matrix"
@@ -43,12 +51,16 @@ STATISTICS_TYPE = "statistics"
 DEBUG_TYPE = "debug"
 DEFAULT_TYPE = "default"
 
-def write_to_manifest_log(manifest_type=DEFAULT_TYPE, log_string="unknown", l=1):
+
+def write_to_manifest_log(manifest_type=DEFAULT_TYPE, log_string="unknown", level=1):
     with open_manifest(manifest_type) as manifest:
-        twrite(manifest, log_string, l=l)
+        twrite(manifest, log_string, level=level)
     return log_string
 
-def write_to_manifest_new_summary_file(manifest_type, new_path, input_info = None, output_info = None):
+
+def write_to_manifest_new_summary_file(
+    manifest_type, new_path, input_info=None, output_info=None
+):
     new_metadata = iot.read_metadata_from_path(new_path)
     new_name = new_metadata["name"]
     new_mtime = new_metadata["mtime"]
@@ -65,7 +77,10 @@ def write_to_manifest_new_summary_file(manifest_type, new_path, input_info = Non
         twrite(manifest, log_string)
     return log_string
 
-def write_to_manifest_new_file(manifest_type, old_path, new_path, input_info = None, output_info = None):
+
+def write_to_manifest_new_file(
+    manifest_type, old_path, new_path, input_info=None, output_info=None
+):
     old_metadata = iot.read_metadata_from_path(old_path)
     new_metadata = iot.read_metadata_from_path(new_path)
     old_name = old_metadata["name"]
@@ -84,7 +99,10 @@ def write_to_manifest_new_file(manifest_type, old_path, new_path, input_info = N
         twrite(manifest, log_string)
     return log_string
 
-def write_to_manifest_file_change(manifest_type, path, pre_change, post_change, change_type=None):
+
+def write_to_manifest_file_change(
+    manifest_type, path, pre_change, post_change, change_type=None
+):
     metadata = iot.read_metadata_from_path(path)
     name = metadata["name"]
     mtime = metadata["mtime"]
@@ -97,14 +115,15 @@ def write_to_manifest_file_change(manifest_type, path, pre_change, post_change, 
         twrite(manifest, log_string)
     return log_string
 
+
 class ManifestSession:
     def __init__(self, manifest_type):
         self.manifest_type = manifest_type
-    
-    def write(self, log_string, l=1):
+
+    def write(self, log_string, level=1):
         with open_manifest(self.manifest_type) as manifest:
-            twrite(manifest, log_string, l=l)
-    
+            twrite(manifest, log_string, level=level)
+
     def start(self):
         config = iot.get_config_private()
         version = config["version"]
@@ -118,13 +137,13 @@ class ManifestSession:
         self.write(f"STARTING fuzzy copy {datetime.now()}", 0)
         self.write(f"CONFIG: version {version} from {date}", 1)
         self.write(f"FROM: {aasis_path} TO: {personal_path}", 1)
-        
+
     def end(self):
         self.write(f"STATS: good {self.good} bad {self.bad} new {self.new}", 1)
         self.write(f"FINISHING copy {datetime.now()}", 0)
-    
+
     def sessions_found(self):
-        self.write(f"SESSIONS FOUND", 0)
+        self.write("SESSIONS FOUND", 0)
 
     def session_start(self, name):
         self.updated = 0
@@ -146,4 +165,3 @@ class ManifestSession:
     def error(self, e):
         self.write(f"{self.name}: failed\n\t\terror: {e}", 1)
         self.bad += 1
-

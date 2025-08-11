@@ -6,39 +6,48 @@ import io_tools as iot
 import data_logger as dl
 
 TEXT_TAG = "<text>"
-LABELLED_TIERS = ["hand", "head", "body", "text"]
+LABELLED_TIERS = ("hand", "head", "body", "text")
 
-def list_eafs():
-    eafs = []
-    for name in iot.list_dir(iot.eafs_path(), "eaf"):
-        eafs.append(name)
-    return eafs
+
+def annotation_names():
+    names = []
+    for name in iot.list_dir_names(iot.annotation_eafs_path(), "eaf"):
+        names.append(name)
+    return names
+
 
 def eaf_info(eaf_path):
     metadata = iot.read_metadata_from_path(eaf_path)
     return metadata["size"]
 
+
 def sanitize(name):
     sanitized_name = name
     sanitized_number = None
-    
-    #seperates speaker number
+
+    # seperates speaker number
     namespace = name
     if any(x.isdigit() for x in name) and "_" in name:
         numspace = name.split("_")[0]
-        numspace = numspace.replace("sspeaker","speaker")
+        numspace = numspace.replace("sspeaker", "speaker")
         namespace = "_".join(name.split("_")[1:])
         sanitized_number = numspace
-    
-    #removes hyphens and underscores
-    sanitized_name = "".join(filter(lambda x: x.isalpha() or x.isdigit() or x == ":" or x == "<" or x == ">", namespace)).lower()
-    
-    #replaces common plurals
-    sanitized_name = sanitized_name.replace("pauses","pause")
-    sanitized_name = sanitized_name.replace("overlaps","overlap")
-    sanitized_name = sanitized_name.replace("hands","hand")
-    
+
+    # removes hyphens and underscores
+    sanitized_name = "".join(
+        filter(
+            lambda x: x.isalpha() or x.isdigit() or x == ":" or x == "<" or x == ">",
+            namespace,
+        )
+    ).lower()
+
+    # replaces common plurals
+    sanitized_name = sanitized_name.replace("pauses", "pause")
+    sanitized_name = sanitized_name.replace("overlaps", "overlap")
+    sanitized_name = sanitized_name.replace("hands", "hand")
+
     return sanitized_name, sanitized_number
+
 
 def section_text(text):
     tp = 0
@@ -54,11 +63,13 @@ def section_text(text):
     return sections
 
 
-def find_text_tokens(text, textual_tokens="ignore", nontextual_tokens = "ignore"):
+def find_text_tokens(text, textual_tokens="ignore", nontextual_tokens="ignore"):
     if textual_tokens == "ignore" and nontextual_tokens == "ignore":
-        dl.log("Ignoring both textual and non-textual text! Is this what you wanted to do?")
+        dl.log(
+            "Ignoring both textual and non-textual text! Is this what you wanted to do?"
+        )
         return ""
-    
+
     sections = section_text(text)
     counter = dict()
     for tag, length in sections:
@@ -67,10 +78,10 @@ def find_text_tokens(text, textual_tokens="ignore", nontextual_tokens = "ignore"
             tokenizing_behaviour = textual_tokens
         if tag != TEXT_TAG:
             tokenizing_behaviour = nontextual_tokens
-        
+
         if tokenizing_behaviour == "ignore":
             continue
-        
+
         if tag not in counter:
             counter[tag] = False
         if tokenizing_behaviour == "contains":
@@ -78,22 +89,23 @@ def find_text_tokens(text, textual_tokens="ignore", nontextual_tokens = "ignore"
         if tokenizing_behaviour == "count":
             counter[tag] += 1
         if tokenizing_behaviour == "sum":
-            counter[tag] += length  
-    
+            counter[tag] += length
+
     tokens = []
     for tag in sorted(counter):
         count = counter[tag]
-        if type(count)==bool:
+        if isinstance(count, bool):
             if count:
                 tokens.append(f"{tag}")
         elif count >= 1:
             tokens.append(f"{tag}:{count}")
     return "+".join(tokens)
 
+
 def sanitize_label(label):
     sanitized_label = label.lower()
-    sanitized_label = sanitized_label.replace("<","")
-    sanitized_label = sanitized_label.replace(">","")
+    sanitized_label = sanitized_label.replace("<", "")
+    sanitized_label = sanitized_label.replace(">", "")
     sanitized_label = sanitized_label.strip()
     if " " in sanitized_label:
         sanitized_label = "other"
@@ -105,66 +117,58 @@ def sanitize_label(label):
         sanitized_label = "other"
     return sanitized_label
 
-def sanitize_text(text, collapse_languages = True):
+
+def sanitize_text(text, collapse_languages=True):
     sanitized_text = text.lower().strip()
 
     if collapse_languages:
-        sanitized_text = sanitized_text.replace("<transen>","<trans>")
-        sanitized_text = sanitized_text.replace("<transjp>","<trans>")
-        sanitized_text = sanitized_text.replace("<transfr>","<trans>")
-    
+        sanitized_text = sanitized_text.replace("<transen>", "<trans>")
+        sanitized_text = sanitized_text.replace("<transjp>", "<trans>")
+        sanitized_text = sanitized_text.replace("<transfr>", "<trans>")
+
     substitution_map = {
-        "<trans>":
-            ["<transen>",
-             "<transjp>",
-             "<transfr>",
-             "<transsv>"],
-        "<bc>":
-            ["<bacch>",
-            "<backh>",
-            "<bakch>",
-            "<backch>",
-            "<bachch>"],
-        "<garbage>":
-            ["<gabage>",
-             "<garbage>",
-             "<gargbage>",
-             "<garbege>",
-             "<unk>",
-             "<other>"
-             "<bgnoise>"],
-        "<laughing>":
-            ["<laugh>",
-             "<laughin>",
-             "<laught>"],
-        "<hesitation>":
-            ["<hesitaiton>",
-             "<hestitation>",
-             "<hesiation>",
-             "<heistation>",
-             "<hesitiation>",
-             "<hesitaion>",
-             "<hesittaion>"],
-        "<paral>":
-            ["<para>"]
+        "<trans>": ["<transen>", "<transjp>", "<transfr>", "<transsv>"],
+        "<bc>": ["<bacch>", "<backh>", "<bakch>", "<backch>", "<bachch>"],
+        "<garbage>": [
+            "<gabage>",
+            "<garbage>",
+            "<gargbage>",
+            "<garbege>",
+            "<unk>",
+            "<other>" "<bgnoise>",
+        ],
+        "<laughing>": ["<laugh>", "<laughin>", "<laught>"],
+        "<hesitation>": [
+            "<hesitaiton>",
+            "<hestitation>",
+            "<hesiation>",
+            "<heistation>",
+            "<hesitiation>",
+            "<hesitaion>",
+            "<hesittaion>",
+        ],
+        "<paral>": ["<para>"],
     }
-     
+
     for substitution in substitution_map:
         if substitution == "<trans>" and not collapse_languages:
             continue
         sequences = substitution_map[substitution]
         for sequence in sequences:
             sanitized_text = sanitized_text.replace(sequence, substitution)
-    
+
     return sanitized_text
+
 
 def get_labels_for_tier(tier, tier_annotations):
     labels = dict()
     for t0, t1, string in tier_annotations:
         tokens_values_string = string
         if tier == "text":
-            tokens_values_string = find_text_tokens(sanitize_text(string), textual_tokens="sum", nontextual_tokens="count")
-        
+            tokens_values_string = find_text_tokens(
+                sanitize_text(string), textual_tokens="sum", nontextual_tokens="count"
+            )
+
         # This is dumb, I should pass a data structure
         tokens_values = tokens_values_string.split("+")
         for token_value in tokens_values:
@@ -180,29 +184,38 @@ def get_labels_for_tier(tier, tier_annotations):
                 labels[label] = []
             labels[label].append((t0, t1, string, value))
     return labels
-    
+
+
 def add_annotation_to_timeseries(a, annotation):
     annotation_start = annotation[0]
     annotation_end = annotation[1]
     value = 1
-    if (len(annotation) >= 4): value = annotation[3]
+    if len(annotation) >= 4:
+        value = annotation[3]
     a[annotation_start:annotation_end] = value
+
 
 def add_annotations_to_timeseries(a, annotations):
     for annotation in annotations:
         add_annotation_to_timeseries(a, annotation)
 
+
 BLOCK_LIST = ["text:other", "text:hesitationhesitation", "hand:other", "text:bgnoise"]
+
+
 def block_listed(key, name="unknown eaf"):
     for block in BLOCK_LIST:
         if block in key:
-            dl.log(f"Ignoring label \'{block}\' while processing \'{name}\' based on block-list.")
+            dl.log(
+                f"Ignoring label '{block}' while processing '{name}' based on block-list."
+            )
             return True
     return False
 
+
 def sanitize_labels(labels, tag=""):
     labels = npw.string_array(labels)
-    sanitized_labels = np.empty(labels.shape, dtype = labels.dtype)
+    sanitized_labels = np.empty(labels.shape, dtype=labels.dtype)
     for i, label in np.ndenumerate(labels):
         sanitized_label, sanitized_number = sanitize(label)
         if sanitized_number is None:
@@ -213,7 +226,8 @@ def sanitize_labels(labels, tag=""):
         sanitized_labels[i] = f"{sanitized_number}{tagspace}{sanitized_label}"
     return sanitized_labels
 
-def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):    
+
+def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
     if isinstance(width, type(None)):
         width = eaf.get_full_time_interval()[1]
 
@@ -225,7 +239,6 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
     for tier in tiers:
         annotations[tier] = eaf.get_annotation_data_for_tier(tier)
 
-
     annotation_series = dict()
     for tier in tiers:
         sanitized_tier, sanitized_number = sanitize(tier)
@@ -234,24 +247,26 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
             tier_name = f"{sanitized_number}_{sanitized_tier}"
         else:
             tier_name = sanitized_tier
-        
+
         if sanitized_tier in LABELLED_TIERS:
             label_annotations = get_labels_for_tier(sanitized_tier, annotations[tier])
-            
+
             for label in label_annotations:
                 series = np.zeros(width)
                 add_annotations_to_timeseries(series, label_annotations[label])
                 key = f"{tier_name}:{label}"
-                if block_listed(key, name): continue
+                if block_listed(key, name):
+                    continue
                 if key not in annotation_series:
                     annotation_series[key] = np.zeros(width)
                 annotation_series[key] = annotation_series[key] + series
         else:
             series = np.zeros(width)
             key = f"{tier_name}"
-            if block_listed(key, name): continue
+            if block_listed(key, name):
+                continue
             if key not in annotation_series:
-                    annotation_series[key] = np.zeros(width)
+                annotation_series[key] = np.zeros(width)
             add_annotations_to_timeseries(series, annotations[tier])
             annotation_series[key] = annotation_series[key] + series
 
@@ -264,6 +279,6 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
         if isinstance(source, type(None)):
             source = nt.ALL_SOURCE
         labels.append(nt.create_label(source, nt.ANNOTATION_TAG, feature))
-    
+
     labels = npw.string_array(labels)
     return data, labels

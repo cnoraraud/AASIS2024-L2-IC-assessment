@@ -1,16 +1,17 @@
-import sys
 import math
-import traceback
-import matplotlib.pyplot as plt
-import numpy as np
-import numpy_wrapper as npw
-import eaf_reader as eafr
-import npz_reader as npzr
-import io_tools as iot
-import naming_tools as nt
-import filtering as filt
+import sys
+
 import analysis as ana
 import data_logger as dl
+import eaf_reader as eafr
+import filtering as filt
+import io_tools as iot
+import matplotlib.pyplot as plt
+import naming_tools as nt
+import npz_reader as npzr
+import numpy as np
+import numpy_wrapper as npw
+
 
 def sanitize_labels(labels, tag=""):
     labels = npw.string_array(labels)
@@ -77,7 +78,7 @@ def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, ze
         plt.show()
 
 def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False):
-    individual = fig == None or ax == None
+    individual = fig is None or ax is None
     cmap = None
     if style == "discrete":
         cmap = "nipy_spectral"
@@ -140,9 +141,10 @@ def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, m
         fig.set_figwidth(20)
         fig.set_figheight(len(plot_labels)/4)
     cax = ax.imshow(np.atleast_2d(plot_data), cmap=cmap, aspect='auto', interpolation='none', norm=norm, vmin=vmin, vmax=vmax)
-    if colorbar == True:
+    if colorbar:
         colorbar = "vertical"
-    if isinstance(colorbar, str): fig.colorbar(cax, orientation=colorbar, aspect=round(1*len(plot_labels)))
+    if isinstance(colorbar, str):
+        fig.colorbar(cax, orientation=colorbar, aspect=round(1*len(plot_labels)))
     ax.tick_params(top=False, labeltop=False, bottom=True, labelbottom=True, left=False, labelleft=True, right=False, labelright=False)
     ax.set_title(title)
     if len(plot_labels) > 0:
@@ -205,7 +207,7 @@ def label_rotation(max_str_length, width, count):
     return round(clipped_angle / snap) * snap
 
 def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15, height=15, vmax=None, fig = None, ax = None, labeltop = True, labelleft = True, savefig=False, overwrite=True, automate_colorscale=True, zero_centre=False, subfolder=None, annotate=False, normalize=None, y_label=None, x_label=None):
-    individual = fig == None or ax == None
+    individual = fig is None or ax is None
     if individual:
         fig, (ax) = plt.subplots(1, 1)
         fig.set_figwidth(width)
@@ -249,7 +251,8 @@ def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15,
         cmap = "berlin"
         cols = ["white","black"]
     cax = ax.imshow(data, cmap=cmap, aspect='equal', interpolation='none', vmin=vmin, vmax=vmax)
-    if colorbar: fig.colorbar(cax)
+    if colorbar:
+        fig.colorbar(cax)
     ax.tick_params(top=False, labeltop=labeltop, bottom=False, labelbottom=False, left=False, labelleft=labelleft, right=False, labelright=False)
     x_pos = np.arange(len(labels_top))
     y_pos = np.arange(len(labels))
@@ -273,7 +276,7 @@ def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15,
                     val_text = f"{val:.2f}"
                 else:
                     val_text = f"{val}"
-                text = ax.text(j, i, val_text, ha="center", va="center", color=cols[c_i])
+                ax.text(j, i, val_text, ha="center", va="center", color=cols[c_i])
     if npw.is_string(x_label):
         ax.set_xlabel(x_label)
     if npw.is_string(y_label):
@@ -286,7 +289,7 @@ def r(data, title, labels, labels_top=None, colorbar=False, vmin=None, width=15,
             plt.show()
 
 def s(x, datas, title, save_fig=False, x_label=None, y_label=None, width=15, height=15, fig = None, ax = None, xlim=None, ylim=None, overwrite=True, subfolder=None, savefig=False):
-    individual = fig == None or ax == None
+    individual = fig is None or ax is None
     if individual:
         fig, (ax) = plt.subplots(1, 1)
         fig.set_figwidth(width)
@@ -302,7 +305,7 @@ def s(x, datas, title, save_fig=False, x_label=None, y_label=None, width=15, hei
         label = None
         if "name" in data:
             label = data["name"]
-        cax = ax.scatter(x, y, s=2, c=c, label=label)
+        ax.scatter(x, y, s=2, c=c, label=label)
     ax.set_title(title)
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
@@ -339,7 +342,7 @@ def round_to_mult(num, mult = 10):
         anchor = anchor*mult
     return anchor
 
-def round_to_closest_mult(num, mults=[2,4,8,5,10,20]):
+def round_to_closest_mult(num, mults=(2,4,8,5,10,20)):
     best_distance = math.inf
     best_round = num
     for mult in mults:
@@ -423,7 +426,8 @@ def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scal
     # Legend and Title
     feature_name = plt_data["feature_name"]
     title = f"Mean occurrences of \'{feature_name}\' in task \'{task_name}\'"
-    modifiers = [f"(N={plt_data["sample_N"]})"]
+    N_string = f"(N={plt_data["sample_N"]})"
+    modifiers = [N_string]
     if np.isscalar(mid_point):
         modifiers.insert(0, "on speaker change")
     title_modifiers = " ".join(modifiers)
@@ -447,7 +451,7 @@ def plot_feature(plt_data, task_name, mid_point=None, save_fig=False, force_scal
 def get_plt_data_turn_taking(task_name, feature_name, n = 5000, use_density = False):
     # only looking at one feature at a time does not optimize for cpu time when working with a batch, but uses less ram
     total_segments = []
-    for npz in npzr.npz_list():
+    for npz in npzr.DL_names():
         if task_name in npz:
             segments = npzr.get_turn_taking_data_segments(npz, [[("has",feature_name)]], n = n, use_density = use_density)
             total_segments += segments
@@ -460,7 +464,7 @@ def get_plt_data_turn_taking(task_name, feature_name, n = 5000, use_density = Fa
 def get_plt_data_overall(task_name, feature_name):
     # only looking at one feature at a time does not optimize for cpu time when working with a batch, but uses less ram
     total_segments = []
-    for npz in npzr.npz_list():
+    for npz in npzr.DL_names():
         if task_name in npz:
             segments = npzr.get_entire_data_as_segment(npz, [[("has",feature_name)]])
             total_segments += segments
@@ -485,8 +489,7 @@ def produce_all_figures_turn_taking():
             try:
                 produce_figures_turn_taking(task_name, feature_name, n = 10000, use_density = False)
             except Exception as e:
-                dl.log(f"Failed to produce figure for {task_name} {feature_name}")
-                dl.log(traceback.format_exc())
+                dl.log_stack(f"Failed to produce figure for {task_name} {feature_name}. ({e})")
 
 def produce_all_figures_overall():
     channel_names = npzr.get_all_channels()
@@ -495,8 +498,7 @@ def produce_all_figures_overall():
             try:
                 produce_figures_overall(task_name, feature_name)
             except Exception as e:
-                dl.log(f"Failed to produce figure for {task_name} {feature_name}")
-                dl.log(traceback.format_exc())
+                dl.log_stack(f"Failed to produce figure for {task_name} {feature_name}. ({e})")
 
 def produce_all_figures():
     produce_all_figures_turn_taking()
