@@ -56,7 +56,7 @@ def replace_labels(labels, sub: str | np.str_, replacement: str | np.str_):
 
 
 def do_label_select(data, labels, label_select):
-    return data[label_select, :], labels[label_select]
+    return data[label_select], labels[label_select]
 
 
 def reorder_data(data, labels):

@@ -85,13 +85,15 @@ def get_sample_dataframe():
     names["npz"] = npzs
     names["npy"] = npys
     df = process_names(names["npz"])
+    df["task"] = df["task"].str.lower()
+    df["annotator"] = df["annotator"].str.lower()
     return names.join(df)
 
 
 def get_clean_speaker_dataframe():
     return clean_no_permissions(get_speaker_dataframe())
 
-
+# TODO: These should probably be read in from the config
 UNIVERSITY_FILENAME = "universities.csv"
 SPEAKER_FILENAME = "consentquiz.csv"
 CEFR_RATINGS_FILENAME = "cefr_ratings.csv"
@@ -103,7 +105,7 @@ def get_speaker_dataframe():
     university_path = iot.special_data_path() / UNIVERSITY_FILENAME
     consent_path = iot.special_data_path() / SPEAKER_FILENAME
     if os.path.isfile(university_path):
-        speaker_info = pd.read_csv(consent_path, sep=";", encoding="latin-1")
+        speaker_info = pd.read_csv(consent_path, sep=";", encoding="utf-8")
     else:
         dl.log("The file 'consentquiz.csv' could not be found.")
     if os.path.isfile(university_path):
@@ -157,13 +159,11 @@ def ratings_to_speakers(df, tasks):
     )
 
 
-def get_rater_dict(ratings, target_columns, anchors_only=True):
-    anchor_speakers = [20, 21, 35, 36, 87, 88]
-
+def get_rater_dict(ratings, target_columns, anchors_only=True, anchors=()):
     speakers = ratings["speaker"].unique()
     rater_dict = dict()
     for speaker in speakers:
-        if anchors_only and speaker not in anchor_speakers:
+        if anchors_only and speaker not in anchors:
             continue
         speaker_ratings = ratings[ratings["speaker"] == speaker]
         mean_ratings = speaker_ratings[target_columns].mean()
@@ -179,8 +179,8 @@ def get_rater_dict(ratings, target_columns, anchors_only=True):
     return rater_dict
 
 
-def get_adjusted_ratings(ratings, target_columns, ignore_columns, anchors_only=True):
-    rater_dict = get_rater_dict(ratings, target_columns, anchors_only=anchors_only)
+def get_adjusted_ratings(ratings, target_columns, ignore_columns, anchors_only=True, anchors=()):
+    rater_dict = get_rater_dict(ratings, target_columns, anchors_only=anchors_only, anchors=anchors)
 
     df_adjusted = ratings.copy().drop(columns=ignore_columns)
     for rater in rater_dict.keys():
@@ -202,7 +202,7 @@ def get_adjusted_ratings(ratings, target_columns, ignore_columns, anchors_only=T
 non_verbal_columns = ["face", "eye_contact", "head", "vocalizing", "if_contributed"]
 
 
-def get_speaker_nonverbals(tasks, anchors_only=True):
+def get_speaker_nonverbals(tasks, anchors_only=True, anchors=()):
     nonverbal_adjusted_ratings = get_adjusted_ratings(
         get_nonverbal_ratings_dataframe(),
         non_verbal_columns,
@@ -214,6 +214,7 @@ def get_speaker_nonverbals(tasks, anchors_only=True):
             "one_row",
         ],
         anchors_only=anchors_only,
+        anchors=anchors
     )
     return (
         ratings_to_speakers(nonverbal_adjusted_ratings, tasks),
@@ -231,12 +232,13 @@ cefr_columns = [
 ]
 
 
-def get_speaker_cefrs(tasks, anchors_only=True):
+def get_speaker_cefrs(tasks, anchors_only=True, anchors=()):
     cefr_adjusted_ratings = get_adjusted_ratings(
         get_cefr_ratings_dataframe(),
         cefr_columns,
         ["task_type", "question_ind", "comment", "one_row"],
         anchors_only=anchors_only,
+        anchors=anchors
     )
     return ratings_to_speakers(cefr_adjusted_ratings, tasks), cefr_adjusted_ratings
 
@@ -289,18 +291,28 @@ def prepared_dev_eval(data_df, rs, tasks):
 def select_folds(df, speaker_list):
     return filter_speakers(df, sumr.flatten_to_list(speaker_list))
 
+def get_rating_anchor_speakers(speakers=None):
+    if isinstance(speakers, type(None)):
+        speakers = get_clean_speaker_dataframe()
+    return tuple(speakers[speakers["Ratings Anchor"] == 1]["SpeakerID"].unique().tolist())
+
+def get_annotations_anchor_speakers(speakers=None):
+    if isinstance(speakers, type(None)):
+        speakers = get_clean_speaker_dataframe()
+    return tuple(speakers[speakers["Annotations Anchor"] == 1]["SpeakerID"].unique().tolist())
+
 
 def get_speakers_samples_full_dataframe(tasks, anchors_only=True):
     speakers = get_clean_speaker_dataframe()
     samples = get_sample_dataframe()
-    samples["task"] = samples["task"].str.lower()
+    anchors = get_rating_anchor_speakers(speakers)
     samples = select_for_task(samples, tasks=nt.task_names_no_prefix(tasks))
 
     non_verbal_speaker, non_verbal_adjusted = get_speaker_nonverbals(
-        nt.task_names_no_prefix(tasks), anchors_only=anchors_only
+        nt.task_names_no_prefix(tasks), anchors_only=anchors_only, anchors=anchors
     )
     cefr_calc_speaker, cefr_adjusted = get_speaker_cefrs(
-        nt.task_names_no_prefix(tasks), anchors_only=anchors_only
+        nt.task_names_no_prefix(tasks), anchors_only=anchors_only, anchors=anchors
     )
 
     dfr.add_partner_id(speakers, samples)

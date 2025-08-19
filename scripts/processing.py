@@ -2,7 +2,6 @@ import sys
 import math
 import numpy as np
 from collections import Counter
-from collections.abc import Callable
 import data_reader as dr
 import npz_reader as npzr
 import eaf_reader as eafr
@@ -14,9 +13,10 @@ import experiment_analyzer as expa
 import data_displayer as dd
 import data_logger as dl
 import io_tools as iot
+import annotators as anns
 
 
-def source_data(overwrite: bool = False):
+def source_data(overwrite = False):
     dl.log("Started creationg folders based on config")
     folders_exist = iot.create_data_folders()
     if folders_exist:
@@ -25,29 +25,29 @@ def source_data(overwrite: bool = False):
         iot.source_annotated_data_fuzzy(overwrite=overwrite)
 
 
-def create_data_files(overwrite: bool = True):
+def create_data_files(overwrite = True):
     dl.log("Started creating DLs")
     create_all_data(overwrite=overwrite)
 
 
-def add_to_data(overwrite: bool = True):
+def add_to_data(overwrite = True):
     dl.log("Started adding joystick data")
     write_joysticks_to_all_data(overwrite=overwrite)
     dl.log("Started adding facial feature data")
     write_facial_features_to_all_data(overwrite=overwrite)
 
 
-def preprocess_data(overwrite: bool = True):
+def preprocess_data(overwrite = True):
     dl.log("Started cleaning data")
     clean_all_data(overwrite=overwrite)
 
 
-def run_analysis(overwrite: bool = True):
+def run_analysis(overwrite = True):
     dl.log("Started analysing data")
     summarize_all_data(overwrite=overwrite)
 
 
-def run_statistics(overwrite: bool = True, collapse: bool = True):
+def run_statistics(overwrite = True, collapse = True):
     dl.log("Started gathering statistics")
     # default_groupings = [["SpeakerID"], ["holistic_cefr"], ["Score"]]
     expr.run_statistics(
@@ -67,9 +67,13 @@ def run_master_table_creation():
     dl.log("Started creating master tabel")
     expa.create_master_tables(tasks=["5"], group_keywords=["collapsed"])
 
+def run_annotator_analysis():
+    dl.log("Started creating annotator comparison")
+    anns.run_annotator_dif_analysis()
+
 
 # duplicates the functionality of batch all with no ability to do partial work
-def data_pipeline(overwrite: bool = True):
+def data_pipeline(overwrite = True):
     source_data(overwrite=overwrite)
     create_data_files(overwrite=overwrite)
     add_to_data(overwrite=overwrite)
@@ -80,11 +84,11 @@ def data_pipeline(overwrite: bool = True):
     dl.log("Finished processing")
 
 
-def get_prints_wavs(key, row: dict, wavs: list, overwrite: bool = True):
+def get_prints_wavs(key, row, wavs, overwrite = True):
     return [f"{key}, wavs: {len(wavs)}"]
 
 
-def get_sanitized_tiers(key, row: dict, wavs: list, overwrite: bool = True):
+def get_sanitized_tiers(key, row, wavs, overwrite = True):
     sanitized_tiers = []
     eaf = row["eaf"]
     tiers = list(eaf.tiers)
@@ -94,7 +98,7 @@ def get_sanitized_tiers(key, row: dict, wavs: list, overwrite: bool = True):
     return sanitized_tiers
 
 
-def get_labelled_tier_labels(key, row: dict, wavs: list, overwrite: bool = True):
+def get_labelled_tier_labels(key, row, wavs, overwrite = True):
     labels = []
     eaf = row["eaf"]
     tiers = list(eaf.tiers)
@@ -114,7 +118,7 @@ def get_labelled_tier_labels(key, row: dict, wavs: list, overwrite: bool = True)
     return labels
 
 
-def create_data_matrix(key, row: dict, wavs: list, overwrite: bool = True):
+def create_data_matrix(key, row, wavs, overwrite = True):
     t_max = wavr.find_wavs_t_max(wavs)
     eaf = row["eaf"]
     name = row["eafpath"].name
@@ -133,13 +137,13 @@ def create_data_matrix(key, row: dict, wavs: list, overwrite: bool = True):
     return D, L
 
 
-def create_and_display_DL(key, row: dict, wavs: list, overwrite: bool = True):
+def create_and_display_DL(key, row, wavs, overwrite = True):
     D, L = create_data_matrix(key, row, wavs)
     dd.cc(D, L, key, overwrite=overwrite)
     return [key]
 
 
-def create_and_write_DL(key, row: dict, wavs: list, overwrite=True):
+def create_and_write_DL(key, row, wavs, overwrite=True):
     D, L = create_data_matrix(key, row, wavs)
     _, res = npzr.write_DL(key, D, L, overwrite=overwrite)
     return res
@@ -147,10 +151,10 @@ def create_and_write_DL(key, row: dict, wavs: list, overwrite=True):
 
 def write_feature_to_data(
     name,
-    D: np.array,
-    L: np.array | list,
-    method: Callable[[str, np.array, np.array | list], tuple],
-    overwrite: bool = False,
+    D,
+    L,
+    method,
+    overwrite = False,
 ):
     start_shape = D.shape
     # TODO: (low prio) (similar functionality exists) Implement overwrite for csvr methods
@@ -167,69 +171,69 @@ def write_feature_to_data(
 
 
 def write_joystick_to_data(
-    name, D: np.array, L: np.array | list, overwrite: bool = True
+    name, D, L, overwrite = True
 ):
     method = csvr.add_joysticks_to_data
     return write_feature_to_data(name, D, L, method, overwrite=overwrite)
 
 
 def write_facial_feature_to_data(
-    name, D: np.array, L: np.array | list, overwrite: bool = True
+    name, D, L, overwrite = True
 ):
     method = csvr.add_facial_features_to_data
     return write_feature_to_data(name, D, L, method, overwrite=overwrite)
 
 
-def clean_data(name, D: np.array, L: np.array | list, overwrite: bool = True):
+def clean_data(name, D, L, overwrite = True):
     res = npzr.clean_DL(name, D, L, overwrite=overwrite)
     return res
 
 
-def summarize_data(name, D: np.array, L: np.array | list, overwrite: bool = True):
+def summarize_data(name, D, L, overwrite = True):
     res = npyr.summarize_data(name, D, L, overwrite=overwrite)
     return res
 
 
-def display_data(name, D: np.array, L: np.array | list, overwrite: bool = True):
+def display_data(name, D, L, overwrite = True):
     dd.cc(D, L, name, overwrite=overwrite)
     return [name]
 
 
-def get_prints_data(name, D: np.array, L: np.array | list, overwrite: bool = False):
+def get_prints_data(name, D, L, overwrite = False):
     return [f"{name}"]
 
 
-def create_all_data(overwrite: bool = True):
+def create_all_data(overwrite = True):
     _ = iterate_through_data_provider(create_and_write_DL, overwrite=overwrite)
 
 
-def display_all_data(overwrite: bool = True):
+def display_all_data(overwrite = True):
     iterate_through_npz_provider(display_data, overwrite=overwrite)
 
 
-def write_joysticks_to_all_data(overwrite: bool = True):
+def write_joysticks_to_all_data(overwrite = True):
     _ = iterate_through_npz_provider(write_joystick_to_data, overwrite=overwrite)
 
 
-def write_facial_features_to_all_data(overwrite: bool = True):
+def write_facial_features_to_all_data(overwrite = True):
     _ = iterate_through_npz_provider(write_facial_feature_to_data, overwrite=overwrite)
 
 
-def clean_all_data(overwrite: bool = True):
+def clean_all_data(overwrite = True):
     _ = iterate_through_npz_provider(clean_data, overwrite=overwrite)
 
 
-def summarize_all_data(overwrite: bool = True):
+def summarize_all_data(overwrite = True):
     _ = iterate_through_npz_provider(summarize_data, overwrite=overwrite)
 
 
 # These iterators were made for 1 to 1 data processing
 # Because the iterator doesn't know what the output is going to be, it can't check for overwriting by itself
 def iterate_through_data_provider(
-    method: Callable[[str, np.array, np.array | list], tuple],
-    iterations: float | int = math.inf,
-    offset: int = 0,
-    overwrite: bool = True,
+    method,
+    iterations = math.inf,
+    offset = 0,
+    overwrite = True,
 ):
     i = 0
     aggregate = []
@@ -252,10 +256,10 @@ def iterate_through_data_provider(
 
 
 def iterate_through_npz_provider(
-    method: Callable[[str, np.array, np.array | list], tuple],
-    iterations: float | int = math.inf,
-    offset: int = 0,
-    overwrite: bool = True,
+    method,
+    iterations = math.inf,
+    offset = 0,
+    overwrite = True,
 ):
     i = 0
     aggregate = []

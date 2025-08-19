@@ -7,6 +7,7 @@ import eaf_reader as eafr
 import filtering as filt
 import io_tools as iot
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import naming_tools as nt
 import npz_reader as npzr
 import numpy as np
@@ -38,7 +39,7 @@ def save_figure(title, subfolder=None, overwrite=True):
         plt.clf()
         plt.close()
 
-def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, zero_mode=False, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False):
+def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, zero_mode=False, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False, color_dict=None):
     labels = npzr.anonymize_speakers(labels)
     relationship_filter = npzr.has(labels, nt.ANNOTATION_TAG) & ~npzr.has(labels, nt.SPEAKERS)
     S1_filter = npzr.has(labels, nt.SPEAKER1) & relationship_filter
@@ -77,7 +78,7 @@ def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, ze
     else:
         plt.show()
 
-def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False):
+def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False, color_dict=None):
     individual = fig is None or ax is None
     cmap = None
     if style == "discrete":
@@ -142,9 +143,18 @@ def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, m
         fig.set_figheight(len(plot_labels)/4)
     cax = ax.imshow(np.atleast_2d(plot_data), cmap=cmap, aspect='auto', interpolation='none', norm=norm, vmin=vmin, vmax=vmax)
     if colorbar:
-        colorbar = "vertical"
-    if isinstance(colorbar, str):
-        fig.colorbar(cax, orientation=colorbar, aspect=round(1*len(plot_labels)))
+        orientation = "vertical"
+        if isinstance(colorbar, str):
+            orientation = colorbar
+        fig.colorbar(cax, orientation=orientation, aspect=round(1*len(plot_labels)))
+    if not isinstance(color_dict, type(None)):
+            handles = []
+            for color_dict_key in color_dict:
+                patch_label = color_dict[color_dict_key]["name"]
+                patch_rgb = color_dict[color_dict_key]["rgb"]
+                patch = mpatches.Patch(facecolor=patch_rgb/255, edgecolor="black", label=patch_label, linewidth=0.5)
+                handles.append(patch)
+            ax.legend(handles=handles, bbox_to_anchor=(0.5, -0.075), ncol=len(handles), loc='center')
     ax.tick_params(top=False, labeltop=False, bottom=True, labelbottom=True, left=False, labelleft=True, right=False, labelright=False)
     ax.set_title(title)
     if len(plot_labels) > 0:
