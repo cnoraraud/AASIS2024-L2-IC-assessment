@@ -5,8 +5,12 @@ channels:
 dependencies:
   - python>=3.12,<3.13
   - pytorch-gpu>=2.6,<2.7
+  - jupyterlab_widgets
+  - ipywidgets
+  - transformers
   - torchvision
   - torchaudio
+  - ffmpeg
   - numpy
   - pandas
   - matplotlib
@@ -19,3 +23,6 @@ dependencies:
     - ipykernel
     - torcheval
     - scikit-learn
+    - torchcodec --index-url=https://download.pytorch.org/whl/cu126
+    - nltk
+    - python-Levenshtein

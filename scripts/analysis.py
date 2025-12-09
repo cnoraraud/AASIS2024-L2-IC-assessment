@@ -53,7 +53,7 @@ def apply_method_to_select(data, method, select, properties=None):
 
 
 def analyze_feature(data, method, i, properties=None):
-    return method(data[i, :], l=i, properties=properties)
+    return method(data[i, :], i, properties=properties)
 
 
 def analyze_all_features(data, method, properties):
@@ -278,23 +278,26 @@ def get_segment_comparisons(a, channel_i, properties):
     }
 
 
-def get_segment_masses_and_widths(a, channel_i, properties):
+def get_segment_data(a, channel_i, properties):
     # Find Segments
     starts, ends = get_segments((~np.isnan(a)).astype(np.int32))
 
     # Analyze Segments
     masses = []
     widths = []
+    maximums = []
     for i in range(len(starts)):
         start = starts[i]
         end = ends[i]
 
-        mass = np.nansum(np.abs(a[start:end]))
+        mass = npw.sum_data(np.abs(a[start:end]))
+        maximum = npw.max_data(np.abs(a[start:end]))
         width = end - start
         masses.append(mass)
         widths.append(width)
+        maximums.append(maximum)
 
-    return {"masses": np.array(masses), "widths": np.array(widths)}
+    return {"masses": np.array(masses), "widths": np.array(widths), "maximums": np.array(maximums)}
 
 
 def get_all_correlations(labels, data):
@@ -321,15 +324,15 @@ def get_all_segment_comparisons(channel_indexes, data, mass_data):
     return res
 
 
-def get_all_segment_masses_and_widths(channel_indexes, data):
-    smws = analyze_all_features(data, get_segment_masses_and_widths, {"B": data})
+def get_all_segment_data(channel_indexes, data):
+    smws = analyze_all_features(data, get_segment_data, {"B": data})
     res = dict()
     for channel_i, smw in zip(channel_indexes, smws):
         res[channel_i] = smw
     return res
 
 
-analysis_order = ["segment_comparisons", "masses_and_widths", "correllations"]
+analysis_order = ["segment_comparisons", "segment_data", "correllations"]
 
 
 def group_analyses(L, *analyses):
@@ -358,6 +361,18 @@ def channel_map(L, sub_L):
             L_map[i] = j
     return L_map
 
+def stat_summary(summary, i_arr, values, val_method, key_format, **kwargs):
+    for i in i_arr:
+        value_name, value = values[i]
+        key = key_format.replace("{}", value_name)
+        summary[key] = val_method(value, **kwargs)
+
+def get_field(data, j):
+    if isinstance(j, type(None)):
+        return None
+    if npw.invalid(data):
+        return None
+    return data[j]
 
 def summarize_analyses(
     L, analyses, Ls, q=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
@@ -365,103 +380,66 @@ def summarize_analyses(
     # volatile function, when you make changes, make sure you also make changes in reflective functions
     # - summary_reader.py get_labels
     L_map_sc = channel_map(L, Ls["segment_comparisons"])
-    # L_map_mnw = label_map(L, Ls["masses_and_widths"])
+    # L_map_mnw = label_map(L, Ls["segment_data"])
     L_map_corr = channel_map(L, Ls["correlations"])
 
     summaries = dict()
     for a in analyses:
         self_summary = dict()
-        label = None if "label" not in a else a["label"]
-        masses = None if "masses" not in a else a["masses"]
-        widths = None if "widths" not in a else a["widths"]
-        flat_widths = None if "flat_widths" not in a else a["flat_widths"]
-        overlaps = None if "overlaps" not in a else a["overlaps"]
-        delays = None if "delays" not in a else a["delays"]
-        differences = None if "differences" not in a else a["differences"]
-        times_relative = None if "times_relative" not in a else a["times_relative"]
-        times_from_start = (
-            None if "times_from_start" not in a else a["times_from_start"]
-        )
-        times_from_end = None if "times_from_end" not in a else a["times_from_end"]
-        pearson_corrs = None if "pearson_corrs" not in a else a["pearson_corrs"]
-        spearman_corrs = None if "spearman_corrs" not in a else a["spearman_corrs"]
+        label = a.get("label")
+        masses = a.get("masses")
+        widths = a.get("widths")
+        maximums = a.get("maximums")
+        flat_widths = a.get("flat_widths")
+        overlaps = a.get("overlaps")
+        delays = a.get("delays")
+        differences = a.get("differences")
+        times_relative = a.get("times_relative")
+        times_from_start = a.get("times_from_start")
+        times_from_end = a.get("times_from_end")
+        pearson_corrs = a.get("pearson_corrs")
+        spearman_corrs = a.get("spearman_corrs")
 
-        density = npw.div_datas(masses, widths)
+        densities = npw.div_datas(masses, widths)
 
         self_summary["label"] = label
-        self_summary["valid"] = npw.valid(widths) or npw.valid(masses)
-        self_summary["segment_count"] = npw.count(widths)
+        self_summary["valid"] = npw.valid(widths) or npw.valid(masses) or npw.valid(maximums)
 
-        self_summary["total_segment_mass"] = npw.sum_data(masses)
-        self_summary["total_segment_width"] = npw.sum_data(widths)
+        self_summary["count_segment"] = npw.count(widths)
 
-        self_summary["mean_segment_density"] = npw.mean_data(density)
-        self_summary["mean_segment_width"] = npw.mean_data(widths)
+        self_values = {
+            0: ("segment_mass", masses),
+            1: ("segment_width", widths),
+            2: ("segment_density", densities),
+            3: ("segment_maximum", maximums),
+        }
 
-        self_summary["median_segment_density"] = npw.median_data(density)
-        self_summary["median_segment_width"] = npw.median_data(widths)
-
-        self_summary["density_quantiles"] = npw.quantiles(density, q)
-        self_summary["width_quantiles"] = npw.quantiles(widths, q)
-
-        self_summary["std_segment_density"] = npw.std_data(density)
-        self_summary["std_segment_width"] = npw.std_data(widths)
-
-        self_summary["var_segment_density"] = npw.var_data(density)
-        self_summary["var_segment_width"] = npw.var_data(widths)
+        stat_summary(self_summary, [0, 1, 3], self_values, npw.sum_data, "total_{}")
+        stat_summary(self_summary, [2, 1, 3], self_values, npw.mean_data, "mean_{}")
+        stat_summary(self_summary, [2, 1, 3], self_values, npw.median_data, "median_{}")
+        stat_summary(self_summary, [2, 1, 3], self_values, npw.quantiles_data, "quantiles_{}", q=q)
+        stat_summary(self_summary, [2, 1, 3], self_values, npw.std_data, "std_{}")
 
         other_summaries = dict()
         for i in range(L.shape[0]):
             other_summary = dict()
             other_label = L[i]
 
-            j_sc = None if i not in L_map_sc else L_map_sc[i]
-            j_corr = None if i not in L_map_corr else L_map_corr[i]
+            j_sc = L_map_sc.get(i)
+            j_corr = L_map_corr.get(i)
 
-            other_overlaps = (
-                None
-                if not npw.valid(overlaps) or isinstance(j_sc, type(None))
-                else overlaps[j_sc]
-            )
-            other_delays = (
-                None
-                if not npw.valid(delays) or isinstance(j_sc, type(None))
-                else delays[j_sc]
-            )
-            other_differences = (
-                None
-                if not npw.valid(differences) or isinstance(j_sc, type(None))
-                else differences[j_sc]
-            )
-            other_times_relative = (
-                None
-                if not npw.valid(times_relative) or isinstance(j_sc, type(None))
-                else times_relative[j_sc]
-            )
-            other_times_from_start = (
-                None
-                if not npw.valid(times_from_start) or isinstance(j_sc, type(None))
-                else times_from_start[j_sc]
-            )
-            other_times_from_end = (
-                None
-                if not npw.valid(times_from_end) or isinstance(j_sc, type(None))
-                else times_from_end[j_sc]
-            )
-            pearson_corr = (
-                None
-                if not npw.valid(pearson_corrs) or isinstance(j_corr, type(None))
-                else pearson_corrs[j_corr]
-            )
-            spearman_corr = (
-                None
-                if not npw.valid(spearman_corrs) or isinstance(j_corr, type(None))
-                else spearman_corrs[j_corr]
-            )
+            other_overlaps = get_field(overlaps, j_sc)
+            other_delays = get_field(delays, j_sc)
+            other_differences = get_field(differences, j_sc)
+            other_times_relative = get_field(times_relative, j_sc)
+            other_times_from_start = get_field(times_from_start, j_sc)
+            other_times_from_end = get_field(times_from_end, j_sc)
+            pearson_corr = get_field(pearson_corrs, j_corr) 
+            spearman_corr = get_field(spearman_corrs, j_corr)
 
             overlap_counts = npw.count_lengths(other_overlaps)
-            overlap_sums = npw.sum_lengths(other_overlaps)
             delay_counts = npw.count_lengths(other_delays)
+            overlap_sums = npw.sum_lengths(other_overlaps)
             other_overlap_percentage = npw.div_datas(overlap_sums, flat_widths)
             other_overlaps_all = npw.group_arrays(other_overlaps)
             other_delays_all = npw.group_arrays(other_delays)
@@ -469,90 +447,28 @@ def summarize_analyses(
             other_times_relative_all = npw.group_arrays(other_times_relative)
             other_times_from_start_all = npw.group_arrays(other_times_from_start)
             other_times_from_end_all = npw.group_arrays(other_times_from_end)
+            
+            other_values = {
+                0: ("segment_overlap_count", overlap_counts),
+                1: ("segment_delay_count", delay_counts),
+                2: ("segment_overlap_ratio", other_overlap_percentage),
+                3: ("overlap", other_overlaps_all),
+                4: ("delay", other_delays_all),
+                5: ("difference", other_differences_all),
+                6: ("times_relative", other_times_relative_all),
+                7: ("times_from_start", other_times_from_start_all),
+                8: ("times_from_end", other_times_from_end_all),
+            }
 
             other_summary["label"] = label
             other_summary["other_label"] = other_label
 
-            other_summary["count_overlap"] = npw.count(other_overlaps_all)
-            other_summary["count_delay"] = npw.count(other_delays_all)
-
-            other_summary["total_overlap"] = npw.sum_data(other_overlaps_all)
-
-            other_summary["mean_overlap"] = npw.mean_data(other_overlaps_all)
-            other_summary["mean_delay"] = npw.mean_data(other_delays_all)
-            other_summary["mean_segment_overlap_count"] = npw.mean_data(overlap_counts)
-            other_summary["mean_segment_delay_count"] = npw.mean_data(delay_counts)
-            other_summary["mean_segment_overlap_ratio"] = npw.mean_data(
-                other_overlap_percentage
-            )
-            other_summary["mean_difference"] = npw.mean_data(other_differences_all)
-            other_summary["mean_times_relative"] = npw.mean_data(
-                other_times_relative_all
-            )
-            other_summary["mean_times_from_start"] = npw.mean_data(
-                other_times_from_start_all
-            )
-            other_summary["mean_times_from_end"] = npw.mean_data(
-                other_times_from_end_all
-            )
-
-            other_summary["overlap_quantiles"] = npw.quantiles(other_overlaps_all, q)
-            other_summary["delay_quantiles"] = npw.quantiles(other_delays_all, q)
-            other_summary["segment_overlap_count_quantiles"] = npw.quantiles(
-                overlap_counts, q
-            )
-            other_summary["segment_delay_count_quantiles"] = npw.quantiles(
-                delay_counts, q
-            )
-            other_summary["segment_overlap_ratio_quantiles"] = npw.quantiles(
-                other_overlap_percentage, q
-            )
-            other_summary["difference_quantiles"] = npw.quantiles(
-                other_differences_all, q
-            )
-            other_summary["times_relative_quantiles"] = npw.quantiles(
-                other_times_relative_all, q
-            )
-            other_summary["times_from_start_quantiles"] = npw.quantiles(
-                other_times_from_start_all, q
-            )
-            other_summary["times_from_end_quantiles"] = npw.quantiles(
-                other_times_from_end_all, q
-            )
-
-            other_summary["median_overlap"] = npw.median_data(other_overlaps_all)
-            other_summary["median_delay"] = npw.median_data(other_delays_all)
-            other_summary["median_segment_overlap_count"] = npw.median_data(
-                overlap_counts
-            )
-            other_summary["median_segment_delay_count"] = npw.median_data(delay_counts)
-            other_summary["median_segment_overlap_ratio"] = npw.median_data(
-                other_overlap_percentage
-            )
-            other_summary["median_difference"] = npw.median_data(other_differences_all)
-            other_summary["median_times_relative"] = npw.median_data(
-                other_times_relative_all
-            )
-            other_summary["median_times_from_start"] = npw.median_data(
-                other_times_from_start_all
-            )
-            other_summary["median_times_from_end"] = npw.median_data(
-                other_times_from_end_all
-            )
-
-            other_summary["std_overlap"] = npw.std_data(other_overlaps_all)
-            other_summary["std_delay"] = npw.std_data(other_delays_all)
-            other_summary["std_segment_overlap_count"] = npw.std_data(overlap_counts)
-            other_summary["std_segment_delay_count"] = npw.std_data(delay_counts)
-            other_summary["std_segment_overlap_ratio"] = npw.std_data(
-                other_overlap_percentage
-            )
-            other_summary["std_difference"] = npw.std_data(other_differences_all)
-            other_summary["std_times_relative"] = npw.std_data(other_times_relative_all)
-            other_summary["std_times_from_start"] = npw.std_data(
-                other_times_from_start_all
-            )
-            other_summary["std_times_from_end"] = npw.std_data(other_times_from_end_all)
+            stat_summary(other_summary, [3,4], other_values, npw.count, "count_{}")
+            stat_summary(other_summary, [3], other_values, npw.sum_data, "total_{}")
+            stat_summary(other_summary, [3, 4, 0, 1, 2, 5, 6, 7, 8], other_values, npw.sum_data, "mean_{}")
+            stat_summary(other_summary, [3, 4, 0, 1, 2, 5, 6, 7, 8], other_values, npw.quantiles_data, "quantiles_{}", q=q)
+            stat_summary(other_summary, [3, 4, 0, 1, 2, 5, 6, 7, 8], other_values, npw.median_data, "median_{}")
+            stat_summary(other_summary, [3, 4, 0, 1, 2, 5, 6, 7, 8], other_values, npw.std_data, "std_{}")
 
             other_summary["pearson_corr"] = pearson_corr
             other_summary["spearman_corr"] = spearman_corr

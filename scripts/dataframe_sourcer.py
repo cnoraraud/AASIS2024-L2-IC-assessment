@@ -254,20 +254,22 @@ def get_dyad_df(tasks):
     )
 
 
-def get_speaker_split(rs, tasks):
-    dyad_df = get_dyad_df(tasks)
-    eval_n = round(len(dyad_df) * 0.1)
+def get_df_split(df, rs, frac):
+    eval_n = round(len(df) * frac)
     df_split = (
-        dyad_df.sample(random_state=rs, frac=1)
+        df.sample(random_state=rs, frac=1)
         .reset_index()
         .drop(columns="index")
         .reset_index()
         .drop(columns="index")
     )
-    eval_dyads_df = df_split[0:eval_n].reset_index().drop(columns="index")
-    dev_dyads_df = df_split[eval_n:].reset_index().drop(columns="index")
-    return dev_dyads_df, eval_dyads_df
+    df_1 = df_split[0:eval_n].reset_index().drop(columns="index")
+    df_2 = df_split[eval_n:].reset_index().drop(columns="index")
+    return df_1, df_2
 
+def get_speaker_split(tasks, rs, frac=0.1):
+    dyad_df = get_dyad_df(tasks)
+    return get_df_split(df=dyad_df, rs=rs, frac=frac)
 
 def filter_speakers(df, speaker_list):
     cond = df["speaker"].isin(speaker_list)
@@ -275,9 +277,8 @@ def filter_speakers(df, speaker_list):
     included_df = df[~cond]
     return excluded_df, included_df
 
-
-def prepared_dev_eval(data_df, rs, tasks):
-    dev_dyads_df, eval_dyads_df = get_speaker_split(rs, tasks)
+def prepared_dev_eval(data_df, tasks, rs):
+    eval_dyads_df, dev_dyads_df = get_speaker_split(tasks=tasks, rs=rs)
     dev_dyads = dev_dyads_df.sort_values(by="speaker_1").values.tolist()
     eval_df, dev_df = filter_speakers(
         data_df,
@@ -287,6 +288,17 @@ def prepared_dev_eval(data_df, rs, tasks):
     )
     return dev_dyads, eval_df, dev_df
 
+def speaker_df_to_speaker_list(df):
+    return list(set(df["speaker_1"].unique().tolist()) | set(df["speaker_2"].unique().tolist()))
+
+def get_all_speaker_splits(rs_eval, rs_test, frac_eval, frac_test, tasks):
+    eval_df, dev_df = get_speaker_split(tasks=tasks, rs=rs_eval, frac=frac_eval)
+    test_df, train_df  = get_df_split(df=dev_df, rs=rs_test, frac=frac_test)
+    speakers = {}
+    speakers["test_speakers"] = speaker_df_to_speaker_list(test_df)
+    speakers["train_speakers"] = speaker_df_to_speaker_list(train_df)
+    speakers["eval_speakers"] = speaker_df_to_speaker_list(eval_df)
+    return speakers
 
 def select_folds(df, speaker_list):
     return filter_speakers(df, sumr.flatten_to_list(speaker_list))
@@ -300,7 +312,6 @@ def get_annotations_anchor_speakers(speakers=None):
     if isinstance(speakers, type(None)):
         speakers = get_clean_speaker_dataframe()
     return tuple(speakers[speakers["Annotations Anchor"] == 1]["SpeakerID"].unique().tolist())
-
 
 def get_speakers_samples_full_dataframe(tasks, anchors_only=True):
     speakers = get_clean_speaker_dataframe()

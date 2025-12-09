@@ -154,11 +154,14 @@ def extract_speakers_DLs(data, labels):
     labels = anonymize_speakers(labels)
     S1_filter = has(labels, nt.SPEAKER1)
     S2_filter = has(labels, nt.SPEAKER2)
+    SA_filter = has(labels, nt.SPEAKERS)
     D1, L1 = do_label_select(data, labels, S1_filter)
     D2, L2 = do_label_select(data, labels, S2_filter)
+    DA, LA = do_label_select(data, labels, SA_filter)
     L1 = strip_label_slots(L1)
     L2 = strip_label_slots(L2)
-    return (D1, L1), (D2, L2)
+    LA = strip_label_slots(LA)
+    return (D1, L1), (D2, L2), (DA, LA)
 
 
 def fit_DLs(DLs):
@@ -179,7 +182,7 @@ def fit_DLs(DLs):
 
 
 def dual_speaker_DLs(data, labels):
-    DL1, DL2 = extract_speakers_DLs(data, labels)
+    DL1, DL2, _ = extract_speakers_DLs(data, labels)
     Ds, L_common = fit_DLs([DL1, DL2])
     return Ds[0], Ds[1], L_common
 
@@ -604,10 +607,12 @@ def running_combined_segment_matrix(segments):
 
 def get_all_channels():
     channels = set()
+    channels_total = set()
     for name in DL_names():
-        for label in read_DL_from_name(name)[2].tolist():
+        for label in anonymize_speakers(read_DL_from_name(name)[2]).tolist():
             channels.add(nt.find_channel(label))
-    return sorted(list(channels))
+            channels_total.add(label)
+    return sorted(list(channels)), sorted(list(channels_total))
 
 
 MAXDISCRETE = 50

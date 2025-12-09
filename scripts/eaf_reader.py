@@ -4,10 +4,18 @@ import numpy_wrapper as npw
 import naming_tools as nt
 import io_tools as iot
 import data_logger as dl
+from pympi import Elan as elan
 
 TEXT_TAG = "<text>"
 LABELLED_TIERS = ("hand", "head", "body", "text")
 
+def read_eaf(eafpath):
+    eaf = elan.Eaf(eafpath)
+    return eaf
+
+def read_eaf_from_name(name):
+    name = nt.file_swap(name, "eaf")
+    return read_eaf(iot.annotation_eafs_path() / name)
 
 def annotation_names():
     names = []
@@ -56,10 +64,12 @@ def section_text(text):
     sections = []
     for m in re.finditer(backchannel_regex, text):
         span = m.span()
-        sections.append((TEXT_TAG, span[0] - tp))
-        sections.append((m[0], span[1] - span[0]))
+        wc = len(text[tp:span[0]].strip().split(" "))
+        sections.append((TEXT_TAG, span[0] - tp, wc))
+        sections.append((m[0], span[1] - span[0], 1))
         tp = span[1]
-    sections.append((TEXT_TAG, tl - tp))
+    wc = len(text[tp:tl].strip().split(" "))
+    sections.append((TEXT_TAG, tl - tp, wc))
     return sections
 
 
@@ -72,7 +82,7 @@ def find_text_tokens(text, textual_tokens="ignore", nontextual_tokens="ignore"):
 
     sections = section_text(text)
     counter = dict()
-    for tag, length in sections:
+    for tag, char_length, word_length in sections:
         tokenizing_behaviour = "undefined"
         if tag == TEXT_TAG:
             tokenizing_behaviour = textual_tokens
@@ -88,18 +98,22 @@ def find_text_tokens(text, textual_tokens="ignore", nontextual_tokens="ignore"):
             counter[tag] = True
         if tokenizing_behaviour == "count":
             counter[tag] += 1
-        if tokenizing_behaviour == "sum":
-            counter[tag] += length
+        if tokenizing_behaviour == "sum_characters":
+            counter[tag] += char_length
+        if tokenizing_behaviour == "sum_words":
+            counter[tag] += word_length
 
-    tokens = []
+
+    tokens = dict()
     for tag in sorted(counter):
         count = counter[tag]
         if isinstance(count, bool):
-            if count:
-                tokens.append(f"{tag}")
-        elif count >= 1:
-            tokens.append(f"{tag}:{count}")
-    return "+".join(tokens)
+            if not count:
+                continue
+        elif count < 1:
+            continue
+        tokens[tag] = counter[tag]
+    return tokens
 
 
 def sanitize_label(label):
@@ -118,6 +132,12 @@ def sanitize_label(label):
     return sanitized_label
 
 
+BACKCHANNEL_TOKEN = "<bc>"
+TRANSLATION_TOKEN = "<trans>"
+GARBAGE_TOKEN = "<garbage>"
+LAUGHING_TOKEN = "<laughing>"
+PARAL_TOKEN = "<paral>"
+
 def sanitize_text(text, collapse_languages=True):
     sanitized_text = text.lower().strip()
 
@@ -127,17 +147,18 @@ def sanitize_text(text, collapse_languages=True):
         sanitized_text = sanitized_text.replace("<transfr>", "<trans>")
 
     substitution_map = {
-        "<trans>": ["<transen>", "<transjp>", "<transfr>", "<transsv>"],
-        "<bc>": ["<bacch>", "<backh>", "<bakch>", "<backch>", "<bachch>"],
-        "<garbage>": [
+        TRANSLATION_TOKEN: ["<transen>", "<transjp>", "<transfr>", "<transsv>"],
+        BACKCHANNEL_TOKEN: ["<bacch>", "<backh>", "<bakch>", "<backch>", "<bachch>"],
+        GARBAGE_TOKEN: [
             "<gabage>",
             "<garbage>",
             "<gargbage>",
             "<garbege>",
             "<unk>",
-            "<other>" "<bgnoise>",
+            "<other>",
+            "<bgnoise>",
         ],
-        "<laughing>": ["<laugh>", "<laughin>", "<laught>"],
+        LAUGHING_TOKEN: ["<laugh>", "<laughin>", "<laught>"],
         "<hesitation>": [
             "<hesitaiton>",
             "<hestitation>",
@@ -147,7 +168,7 @@ def sanitize_text(text, collapse_languages=True):
             "<hesitaion>",
             "<hesittaion>",
         ],
-        "<paral>": ["<para>"],
+        PARAL_TOKEN: ["<para>"],
     }
 
     for substitution in substitution_map:
@@ -163,22 +184,17 @@ def sanitize_text(text, collapse_languages=True):
 def get_labels_for_tier(tier, tier_annotations):
     labels = dict()
     for t0, t1, string in tier_annotations:
-        tokens_values_string = string
+        tokens_values = {string: True}
         if tier == "text":
-            tokens_values_string = find_text_tokens(
-                sanitize_text(string), textual_tokens="sum", nontextual_tokens="count"
+            tokens_values = find_text_tokens(
+                sanitize_text(string), textual_tokens="sum_words", nontextual_tokens="sum_words"
             )
 
-        # This is dumb, I should pass a data structure
-        tokens_values = tokens_values_string.split("+")
-        for token_value in tokens_values:
-            label = "undefined"
-            value = 1
-            if ":" in token_value:
-                label = token_value.split(":")[0]
-                value = int(token_value.split(":")[1])
-            else:
-                label = token_value
+        for token_key in tokens_values:
+            label = token_key
+            value = tokens_values[token_key]
+            if isinstance(value, bool):
+                value = int(value)
             label = sanitize_label(label)
             if label not in labels:
                 labels[label] = []
@@ -260,7 +276,7 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
                 if key not in annotation_series:
                     annotation_series[key] = np.zeros(width)
                 annotation_series[key] = annotation_series[key] + series
-        else:
+        if sanitized_tier not in LABELLED_TIERS:
             series = np.zeros(width)
             key = f"{tier_name}"
             if block_listed(key, name):
@@ -277,7 +293,7 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
         data[:, i] = annotation_series[label]
         feature, source = sanitize(label)
         if isinstance(source, type(None)):
-            source = nt.ALL_SOURCE
+            source = nt.SPEAKERS
         labels.append(nt.create_label(source, nt.ANNOTATION_TAG, feature))
 
     labels = npw.string_array(labels)

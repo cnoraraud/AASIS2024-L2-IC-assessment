@@ -28,6 +28,8 @@ def sum_lengths(list_of_a):
             sums.append(sum_data(a))
     return np.array(sums)
 
+def invalid(data, min_n=0):
+    return not valid(data, min_n=min_n)
 
 def valid(data, min_n=0):
     if is_string(data):
@@ -55,7 +57,7 @@ def valid_dist(data, total_n=4, unique_n=1):
     return True
 
 
-def quantiles(data, q, method="linear"):
+def quantiles_data(data, q, method="linear"):
     if not valid(data):
         return None
     return np.nanquantile(data, q=q, method=method)
@@ -76,11 +78,15 @@ def count(data):
         return 1
     return data.size - np.isnan(data).sum()
 
+def max_data(data, initial=0):
+    if not valid(data):
+        return initial
+    return np.nanmax(data, initial=initial)
 
 def sum_data(data):
     if not valid(data):
         return 0
-    return np.sum(data)
+    return np.nansum(data)
 
 
 def mean_data(data):

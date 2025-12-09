@@ -13,7 +13,7 @@ def arg_to_bool(arg):
 if len(sys.argv) > 1:
     arg_string = sys.argv[1]
 
-arg_count = 9
+arg_count = 10
 args = []
 for i in range(arg_count):
     if len(arg_string) <= i:
@@ -26,11 +26,12 @@ sourcing = args[0]
 create_data = args[1]
 joystick = args[2]
 facial = args[3]
-clean_data = args[4]
-summarize = args[5]
-statistics = args[6]
-table = args[7]
-overwrite = args[8]
+semantic = args[4]
+clean_data = args[5]
+summarize = args[6]
+statistics = args[7]
+table = args[8]
+overwrite = args[9]
 
 if overwrite:
     dl.log("Updating all data.")
@@ -53,6 +54,9 @@ if joystick:
 if facial:
     dl.log("Started adding facial feature data")
     proc.write_facial_features_to_all_data(overwrite=overwrite)
+if semantic:
+    dl.log("Started adding semantic data")
+    proc.write_semantic_features_to_all_data(overwrite=overwrite)
 if clean_data:
     dl.log("Started cleaning data")
     proc.clean_all_data(overwrite=overwrite)

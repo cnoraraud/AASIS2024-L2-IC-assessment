@@ -139,7 +139,10 @@ def interpolate_nans(data, properties=None):
 
 def fit_to_size(data, properties=None):
     t = properties["t"]
+    kind = "nearest"
+    if "kind" in properties:
+        kind = properties["kind"]
     x = np.arange(data.shape[0]) / data.shape[0]
     x_output = np.arange(t) / t
-    f = interp1d(x, data, kind="nearest", fill_value="extrapolate", bounds_error=False)
+    f = interp1d(x, data, kind=kind, fill_value="extrapolate", bounds_error=False)
     return f(x_output)

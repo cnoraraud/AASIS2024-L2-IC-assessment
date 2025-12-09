@@ -130,6 +130,17 @@ def figs_path():
 def output_csvs_path():
     return private_data_path("output_csvs")
 
+def chart_pts_path():
+    return private_data_path("chart_pts")
+
+def label_csvs_path():
+    return private_data_path("label_csvs")
+
+def train_reports_path():
+    return private_data_path("train_reports")
+
+def torch_models_path():
+    return private_data_path("torch_models")
 
 def manifests_path():
     return private_data_path("manifests")
@@ -209,6 +220,13 @@ def get_csv_paths_joystick(name):
         name, use_defaults=False, joystick_csv_list=joystick_csv_list
     )
     return session["joystick_csvs"]
+
+def get_eaf_paths_annotation(name):
+    eaf_list = annotation_eafs_path().glob("**/*.eaf")
+    session = get_related_session_for_file(
+        name, use_defaults=False, eaf_list=eaf_list
+    )
+    return session["eafs"]
 
 
 # @deprecated("Use fuzzy sourcing instead")

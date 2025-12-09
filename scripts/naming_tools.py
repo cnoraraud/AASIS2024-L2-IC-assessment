@@ -28,9 +28,9 @@ REACTIVE = "reactive"
 NORMALIZABLE = "normalizable"
 GENERAL = "general"
 
-PROACTIVE_FEATURES_LIST = sorted(('mean_segment_density', 'mean_segment_width', 'segment_count', 'std_segment_density', 'std_segment_width', 'total_segment_mass', 'total_segment_width', 'var_segment_density', 'var_segment_width'))
-REACTIVE_FEATURES_LIST = sorted(('mean_difference', 'mean_times_relative', 'mean_times_from_start', 'mean_times_from_end', 'median_difference', 'median_times_relative', 'median_times_from_start', 'median_times_from_end', 'std_overlap', 'std_delay', 'std_segment_overlap_count', 'std_segment_delay_count', 'std_segment_overlap_ratio', 'std_difference', 'std_times_relative', 'std_times_from_start', 'std_times_from_end', 'count_delay', 'count_overlap', 'mean_delay', 'mean_overlap', 'mean_segment_delay_count', 'mean_segment_overlap_count', 'mean_segment_overlap_ratio', 'median_delay', 'median_overlap', 'median_segment_delay_count', 'median_segment_overlap_count', 'median_segment_overlap_ratio', 'pearson_corr', 'spearman_corr', 'total_overlap'))
-NORMALIZABLE_FEATURES_LIST = sorted(('segment_count', 'total_segment_mass', 'total_segment_width', 'count_delay', 'count_overlap', 'total_overlap'))
+PROACTIVE_FEATURES_LIST = sorted(('count_segment', 'mean_segment_density', 'mean_segment_maximum', 'mean_segment_width', 'median_segment_density', 'median_segment_maximum', 'median_segment_width', 'std_segment_density', 'std_segment_maximum', 'std_segment_width', 'total_segment_mass', 'total_segment_maximum', 'total_segment_width'))
+REACTIVE_FEATURES_LIST = sorted(('count_delay', 'count_overlap', 'mean_delay', 'mean_difference', 'mean_overlap', 'mean_segment_delay_count', 'mean_segment_overlap_count', 'mean_segment_overlap_ratio', 'mean_times_from_end', 'mean_times_from_start', 'mean_times_relative', 'median_delay', 'median_difference', 'median_overlap', 'median_segment_delay_count', 'median_segment_overlap_count', 'median_segment_overlap_ratio', 'median_times_from_end', 'median_times_from_start', 'median_times_relative', 'pearson_corr', 'spearman_corr', 'std_delay', 'std_difference', 'std_overlap', 'std_segment_delay_count', 'std_segment_overlap_count', 'std_segment_overlap_ratio', 'std_times_from_end', 'std_times_from_start', 'std_times_relative', 'total_overlap'))
+NORMALIZABLE_FEATURES_LIST = sorted(('count_segment', 'total_segment_mass', 'total_segment_maximum', 'total_segment_width', 'count_delay', 'count_overlap', 'total_overlap'))
 
 COLLAPSE_INITIATOR_LIST = sorted(PROACTIVE_FEATURES_LIST)
 COLLAPSE_RESPONDER_LIST = sorted(REACTIVE_FEATURES_LIST)
@@ -225,7 +225,8 @@ def find_sources(label):
         sources.append(SPEAKER1)
     if SPEAKER2 in candidate:
         sources.append(SPEAKER2)
-    sources.extend(to_sources(candidate))
+    if SPEAKERS not in candidate and SPEAKER1 not in candidate and SPEAKER2 not in candidate:
+        sources.extend(to_sources(candidate))
     return sources
 
 def to_name_number(number_string):
@@ -273,6 +274,10 @@ def get_anon_source(source):
         return source
     if source == SPEAKERNONE:
         return source
+    if source == SPEAKER1:
+        return SPEAKER1
+    if source == SPEAKER2:
+        return SPEAKER2
     if source.isnumeric():
         if int(source) % 2 != 0:
             return SPEAKER1

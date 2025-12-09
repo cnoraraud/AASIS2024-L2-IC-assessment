@@ -3,7 +3,7 @@ import data_logger as dl
 import npz_reader as npzr
 
 dl.log("Started batching figures!")
-channel_names = npzr.get_all_channels()
+channel_names, _ = npzr.get_all_channels()
 task_names = ["task5", "task4A", "task4B"]
 for task_name in task_names:
     for feature_name in channel_names:

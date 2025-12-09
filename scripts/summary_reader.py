@@ -95,9 +95,9 @@ def print_in_blocks(word_list, n=4):
     for word in word_list:
         i += 1
         if (i + 1) % n == 0 or i + 1 == len(word_list):
-            dl.log(word)
+            dl.log(word, level=0)
         else:
-            dl.log(word, end="\t")
+            dl.log(word, end="\t", level=0)
 
 
 def get_summary_info_full(summary):

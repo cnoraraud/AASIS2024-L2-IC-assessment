@@ -493,7 +493,7 @@ def produce_figures_overall(task_name, feature_name):
     plot_feature(plt_data, task_name, x_is_ratio=True, force_scale=True, save_fig=True, subfolder=f"overall\\{task_name}")
 
 def produce_all_figures_turn_taking():
-    channel_names = npzr.get_all_channels()
+    channel_names, _ = npzr.get_all_channels()
     for task_name in ["task5","task4A","task4B"]:
         for feature_name in channel_names:
             try:
@@ -502,7 +502,7 @@ def produce_all_figures_turn_taking():
                 dl.log_stack(f"Failed to produce figure for {task_name} {feature_name}. ({e})")
 
 def produce_all_figures_overall():
-    channel_names = npzr.get_all_channels()
+    channel_names, _ = npzr.get_all_channels()
     for task_name in ["task5","task4A","task4B"]:
         for feature_name in channel_names:
             try:

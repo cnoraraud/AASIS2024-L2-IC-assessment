@@ -11,7 +11,7 @@ import summary_reader as sumr
 
 KEY_COLS = ("feature", "channel_1", "channel_2")
 
-CONSTRUCT = (
+CONSTRUCT_DEPRECATED = (
     ("mean_segment_density", "self (ann.) ff:yaw", ""),
     ("total_segment_width", "self (ann.) hand:fidget", ""),
     ("mean_times_relative", "self (ext.) ic:turn", "self (ann.) hand:gesture"),
@@ -165,7 +165,7 @@ def get_collations(tasks=None, group_keywords=None, random_choice=True):
     return test_collations
 
 
-def merge_to_master(collations):
+def merge_to_overall(collations):
     collation_keys = sorted(list(collations.keys()))
     master_df = None
     for i in range(len(collation_keys)):
@@ -281,7 +281,7 @@ def filter_columns(df, bad_keys=("file_path", "Unnamed: 0")):
 
 def filter_construct(df):
     all_conds = []
-    for c_row in CONSTRUCT:
+    for c_row in CONSTRUCT_DEPRECATED:
         cond1 = df["feature"] == c_row[0]
         cond2 = df["channel_1"] == c_row[1]
         if len(c_row[2]) > 0:
@@ -352,25 +352,25 @@ CENTRAL_STATISTIC_NAMES = [
 MAIN_RATINGS = ["holistic", "IC_score", "turn_taking", "construct_score"]
 
 
-def create_master_tables(
+def create_overall_tables(
     tasks=None, group_keywords=None, central_statistic_names=CENTRAL_STATISTIC_NAMES
 ):
     task_name = "".join(sorted(["5"]))
 
     collations = get_collations(tasks, group_keywords)
-    master_df = merge_to_master(collations)
-    master_df["channel_1"] = master_df["channel_1"].fillna("")
-    master_df["channel_2"] = master_df["channel_2"].fillna("")
-    master_df["feature"] = master_df["feature"].fillna("")
+    overall_df = merge_to_overall(collations)
+    overall_df["channel_1"] = overall_df["channel_1"].fillna("")
+    overall_df["channel_2"] = overall_df["channel_2"].fillna("")
+    overall_df["feature"] = overall_df["feature"].fillna("")
 
     for central_statistic_name in central_statistic_names:
         dl.write_to_manifest_log(
             dl.STATISTICS_TYPE,
-            f"Creating master tables for task group ({task_name}), focusing on statistic {central_statistic_name}",
+            f"Creating overall tables for task group ({task_name}), focusing on statistic {central_statistic_name}",
         )
         central_statistic = f"{central_statistic_name}_({task_name})"
 
-        filtered_df0 = master_df.copy()
+        filtered_df0 = overall_df.copy()
 
         filtered_df = filtered_df0.copy()
         filtered_df = filter_missing_required_columns(
@@ -417,7 +417,7 @@ def create_master_tables(
             dl.write_to_manifest_new_summary_file(
                 dl.STATISTICS_TYPE,
                 fullpath,
-                f"task_group_{task_name}:{len(master_df)}",
+                f"task_group_{task_name}:{len(overall_df)}",
                 f"{df_n}",
             )
 
@@ -427,14 +427,14 @@ def get_y_column(rating):
 
 
 def get_x_column(chan1, chan2, feat):
-    return f"x_{feat} >> {chan1}) | {chan2}"
+    return f"x_{feat} >> {chan1} | {chan2}"
 
 
 def get_keyfields(df):
     key_fields = []
-    for _, row_keyfields in df[KEY_COLS].iterrows():
+    for _, row_keyfields in df[list(KEY_COLS)].iterrows():
         found_row_keyfields = []
-        for key_field_key in row_keyfields:
+        for key_field_key in row_keyfields.keys():
             found_row_keyfields.append(row_keyfields[key_field_key])
         key_fields.append(found_row_keyfields)
     return key_fields
@@ -442,10 +442,11 @@ def get_keyfields(df):
 
 def get_speaker_data(
     tasks,
-    key_fields=CONSTRUCT,
+    key_fields=CONSTRUCT_DEPRECATED,
     rating_fields=MAIN_RATINGS,
     sample_groupings=None,
     summaries=None,
+    normalize=True,
 ):
     if isinstance(sample_groupings, type(None)):
         speakers, samples = dfs.get_speakers_samples_full_dataframe(tasks)
@@ -480,14 +481,18 @@ def get_speaker_data(
             speaker_id = sample["speaker"]
             S = sample["S"]
             npy = sample["npy"]
+            annotator = sample["annotator"]
+            task = sample["task"]
             ratings = sample["ratings"]
-            speaker_row = {"speaker": speaker_id}
+            speaker_row = {"speaker": speaker_id, "annotator": annotator, "task": task}
             for rating, y_column in zip(rating_fields, y_columns):
                 speaker_row[y_column] = ratings[rating]
 
             performance_length = sumr.get(
                 summaries, f"{npy}/summary/general/performance_length"
             )
+            speaker_row["performance_length"] = performance_length
+            
             label_summaries = sumr.get(summaries, f"{npy}/summary/label_summaries")
             if isinstance(label_summaries, type(None)):
                 dl.log(f"No label summaries were found for {npy}")
@@ -508,21 +513,22 @@ def get_speaker_data(
                     val = sumr.get(
                         label_summaries, f"{l1}/others/{l2}/{feat}", fallback=np.nan
                     )
-                if normalizable == nt.NORMALIZABLE:
+                if normalize and normalizable == nt.NORMALIZABLE:
                     val = val / performance_length
                 x_column = get_x_column(chan1, chan2, feat)
 
                 speaker_row[x_column] = val
             speaker_data.append(speaker_row)
-        data_df = pd.DataFrame(speaker_data)
-        non_duplicated_columns = data_df[x_columns].T.duplicated()
-        x_columns = non_duplicated_columns[~non_duplicated_columns].keys().to_list()
+    data_df = pd.DataFrame(speaker_data)
+    non_duplicated_columns = data_df[x_columns].T.duplicated()
+    x_columns = non_duplicated_columns[~non_duplicated_columns].keys().to_list()
     return data_df, x_columns, y_columns
 
 
-def load_table(tasks, file_dir, table_name, criteria="bonferroni rejection (0.05)"):
+def load_table(tasks, table_name, file_dir=None, criteria="bonferroni rejection (0.05)"):
     task_name = "".join(sorted(nt.task_names_no_prefix(tasks)))
-    file_dir = f"overall_({task_name})"
+    if isinstance(file_dir, type(None)):
+        file_dir = f"overall_({task_name})"
     file_name = f"{table_name}.csv"
     test_name = f"{table_name} {criteria}".replace("_", " ")
     test_name = test_name.split(" ")

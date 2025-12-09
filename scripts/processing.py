@@ -10,6 +10,7 @@ import csv_reader as csvr
 import npy_reader as npyr
 import experiment_runner as expr
 import experiment_analyzer as expa
+import semantics_analyzer as sema
 import data_displayer as dd
 import data_logger as dl
 import io_tools as iot
@@ -35,6 +36,8 @@ def add_to_data(overwrite = True):
     write_joysticks_to_all_data(overwrite=overwrite)
     dl.log("Started adding facial feature data")
     write_facial_features_to_all_data(overwrite=overwrite)
+    dl.log("Started adding semnatic data")
+    write_semantic_features_to_all_data(overwrite=overwrite)
 
 
 def preprocess_data(overwrite = True):
@@ -65,7 +68,7 @@ def run_statistics(overwrite = True, collapse = True):
 
 def run_master_table_creation():
     dl.log("Started creating master tabel")
-    expa.create_master_tables(tasks=["5"], group_keywords=["collapsed"])
+    expa.create_overall_tables(tasks=["5"], group_keywords=["collapsed"])
 
 def run_annotator_analysis():
     dl.log("Started creating annotator comparison")
@@ -108,9 +111,15 @@ def get_labelled_tier_labels(key, row, wavs, overwrite = True):
             for _, _, text in eaf.get_annotation_data_for_tier(tier):
                 label = None
                 if sanitized_tier == "text":
-                    label = eafr.find_text_tokens(
+                    label = ""
+                    tokens = eafr.find_text_tokens(
                         eafr.sanitize_text(text), nontextual_tokens="contains"
                     )
+                    found_keys = []
+                    for token_key in tokens:
+                        if tokens[token_key]:
+                            found_keys.append(token_key)
+                    label = "+".join(found_keys)
                 else:
                     label = text
                 label = eafr.sanitize_label(label)
@@ -155,10 +164,11 @@ def write_feature_to_data(
     L,
     method,
     overwrite = False,
+    **kwargs
 ):
     start_shape = D.shape
     # TODO: (low prio) (similar functionality exists) Implement overwrite for csvr methods
-    name, D, L = method(name, D, L)
+    name, D, L = method(name, D, L, **kwargs)
     D, L = npzr.reorder_data(D, L)
     npz_path, _ = npzr.write_DL(name, D, L, write_to_manifest=False, overwrite=True)
     end_shape = D.shape
@@ -183,6 +193,11 @@ def write_facial_feature_to_data(
     method = csvr.add_facial_features_to_data
     return write_feature_to_data(name, D, L, method, overwrite=overwrite)
 
+def write_semanatic_features_to_data(
+    name, D, L, overwrite = True, model=None, tokenizer=None
+):
+    method = sema.add_semantic_features_to_data
+    return write_feature_to_data(name, D, L, method, overwrite=overwrite, model=model, tokenizer=tokenizer)
 
 def clean_data(name, D, L, overwrite = True):
     res = npzr.clean_DL(name, D, L, overwrite=overwrite)
@@ -218,6 +233,10 @@ def write_joysticks_to_all_data(overwrite = True):
 def write_facial_features_to_all_data(overwrite = True):
     _ = iterate_through_npz_provider(write_facial_feature_to_data, overwrite=overwrite)
 
+
+def write_semantic_features_to_all_data(overwrite = True):
+    model, tokenizer = sema.get_bert("TurkuNLP/bert-base-finnish-uncased-v1")
+    _ = iterate_through_npz_provider(write_semanatic_features_to_data, overwrite=overwrite, model=model, tokenizer=tokenizer)
 
 def clean_all_data(overwrite = True):
     _ = iterate_through_npz_provider(clean_data, overwrite=overwrite)
@@ -260,6 +279,7 @@ def iterate_through_npz_provider(
     iterations = math.inf,
     offset = 0,
     overwrite = True,
+    **kwargs,
 ):
     i = 0
     aggregate = []
@@ -272,7 +292,7 @@ def iterate_through_npz_provider(
             continue
         for name, D, L in zip(names, Ds, Ls):
             try:
-                results = method(name, D, L, overwrite)
+                results = method(name, D, L, overwrite, **kwargs)
                 aggregate.extend(results)
             except Exception as e:
                 dl.log(f"Failure at {i}:{method.__name__} - {name}\n\t{e}")

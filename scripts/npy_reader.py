@@ -75,12 +75,12 @@ def get_summary(name, D, L):
     )
 
     L_sc = L
-    L_mnw = L
+    L_sd = L
     L_corr = L
 
     ond_analyses = ana.get_all_segment_comparisons(L_sc, D_binary, D_thresholded)
 
-    mnw_analyses = ana.get_all_segment_masses_and_widths(L_mnw, D_thresholded)
+    mnw_analyses = ana.get_all_segment_data(L_sd, D_thresholded)
 
     corr_analyses = ana.get_all_correlations(L_corr, D_continuous)
 
@@ -89,7 +89,7 @@ def get_summary(name, D, L):
     analyses = ana.group_analyses(L, ond_analyses, mnw_analyses, corr_analyses)
     Ls = {
         "segment_comparisons": L_sc,
-        "masses_and_widths": L_mnw,
+        "segment_data": L_sd,
         "correlations": L_corr,
     }
 
@@ -107,7 +107,7 @@ def get_summary(name, D, L):
         "name": name,
     }
 
-    del Ls, L_sc, L_mnw, L_corr, analyses
+    del Ls, L_sc, L_sd, L_corr, analyses
 
     return summary
 

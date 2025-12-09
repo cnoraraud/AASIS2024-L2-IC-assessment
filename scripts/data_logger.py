@@ -4,11 +4,17 @@ from datetime import datetime
 import pathlib as p
 import os
 
-pid = os.getpid()
+def get_process_id():
+    return os.getpid()
 
+def get_timestamp(clean=True):
+    if clean:
+        return datetime.now().strftime("%Y-%m-%dT%H-%M")
+    return datetime.now()
 
 def tstring(log_string, level=1):
-    today = datetime.now()
+    pid = get_process_id()
+    today = get_timestamp(clean=False)
     fs = " "
     if level == 0:
         today = ""
@@ -17,13 +23,13 @@ def tstring(log_string, level=1):
     return f"[p{pid}] {tabs}{today}{fs}{log_string}"
 
 
-def tprint(log_string):
-    print(tstring(log_string))
+def tprint(log_string, end="\n", level=1):
+    print(tstring(log_string, level=level), end=end)
 
 
-def log(log_string):
-    tprint(log_string)
-    write_to_manifest_log(DEBUG_TYPE, log_string)
+def log(log_string="", end="\n", level=1):
+    tprint(log_string, end=end, level=level)
+    write_to_manifest_log(DEBUG_TYPE, log_string, level=level, end=end)
 
 
 def log_stack(log_string=None):
@@ -36,8 +42,8 @@ def hand_base(name, mtime):
     return f"{name} (m: {mtime})"
 
 
-def twrite(manifest, log_string, level=1):
-    manifest.write(f"{tstring(log_string, level=level)}\n")
+def twrite(manifest, log_string, level=1, end="\n"):
+    manifest.write(f"{tstring(log_string, level=level)}{end}")
 
 
 def open_manifest(manifest_type):
@@ -48,13 +54,15 @@ COPY_TYPE = "copy"
 DATA_TYPE = "data_matrix"
 SUMMARY_TYPE = "summary"
 STATISTICS_TYPE = "statistics"
+CHART_PREPROCESSING_TYPE = "chart_preprocessing"
+MODEL_TRAINING_TYPE = "model_training"
 DEBUG_TYPE = "debug"
 DEFAULT_TYPE = "default"
 
 
-def write_to_manifest_log(manifest_type=DEFAULT_TYPE, log_string="unknown", level=1):
+def write_to_manifest_log(manifest_type=DEFAULT_TYPE, log_string="unknown", level=1, end="\n"):
     with open_manifest(manifest_type) as manifest:
-        twrite(manifest, log_string, level=level)
+        twrite(manifest, log_string, level=level, end=end)
     return log_string
 
 

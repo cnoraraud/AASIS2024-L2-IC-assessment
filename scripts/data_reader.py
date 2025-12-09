@@ -4,7 +4,7 @@ import sys
 import data_logger as dl
 import io_tools as iot
 import wav_reader as wavr
-from pympi import Elan as elan
+import eaf_reader as eafr
 
 
 def num_to_n_chars(num: int, n: int):
@@ -107,7 +107,7 @@ def data_section(table, start=0, n=None):
 
 
 def read_session_files(eafpath, sr: int = None, do_wav=False):
-    eaf = elan.Eaf(eafpath)
+    eaf = eafr.read_eaf(eafpath)
     # The wav_list used to be pulled out of the eaf file, but this wasn't done consistently,
     # so now we're pulling them fuzzily
     wav_paths = iot.get_wav_paths(eafpath)

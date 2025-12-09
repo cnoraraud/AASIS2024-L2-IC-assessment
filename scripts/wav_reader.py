@@ -176,7 +176,7 @@ def wavs_to_data_matrix(
             elif mic in right_mics:
                 speaker = max(speakers)
             elif mic in gen_mics:
-                speaker = nt.ALL_SOURCE
+                speaker = nt.SPEAKERS
             else:
                 raise ValueError(
                     f"Unknown mic {mic}. Don't know how to assign it to sources ({SC})."
