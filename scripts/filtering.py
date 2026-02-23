@@ -35,6 +35,7 @@ def to_01(data, properties=None):
         axis = properties["axis"]
     pos_data = data - np.nanmin(data, axis=axis, keepdims=True)
     data_s = np.nanmax(pos_data, axis=axis, keepdims=True)
+    data_s[np.isclose(data_s, 0.0)] = 1.0
     return pos_data / data_s
 
 
@@ -51,6 +52,7 @@ def norm(data, properties=None):
         axis = properties["axis"]
     data_c = data - np.nanmean(data, axis=axis, keepdims=True)
     data_s = np.nanmax(np.abs(data_c), axis=axis, keepdims=True)
+    data_s[np.isclose(data_s, 0.0)] = 1.0
     return data_c / data_s
 
 

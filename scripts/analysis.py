@@ -103,7 +103,7 @@ def analyze_select(data, method, select, properties=None):
 # Not as precise but doesn't struggle with edge cases.
 # Assumes it's always someone's turn
 def turn_taking_times_comparative(D, L, n=5000, use_density=False):
-    L_filter = npzr.has(L, "text:text") & npzr.double_speaker_filter(L)
+    L_filter = npzr.has(L, f"{nt.TEXT_TYPE}:text") & npzr.double_speaker_filter(L)
     D, L = npzr.do_label_select(D, L, L_filter)
     if np.size(L) < 2:
         return np.zeros(0), np.full(0, nt.SPEAKERNONE)
@@ -463,9 +463,9 @@ def summarize_analyses(
             other_summary["label"] = label
             other_summary["other_label"] = other_label
 
-            stat_summary(other_summary, [3,4], other_values, npw.count, "count_{}")
-            stat_summary(other_summary, [3], other_values, npw.sum_data, "total_{}")
-            stat_summary(other_summary, [3, 4, 0, 1, 2, 5, 6, 7, 8], other_values, npw.sum_data, "mean_{}")
+            stat_summary(other_summary, [3, 4], other_values, npw.count, "count_{}")
+            stat_summary(other_summary, [3, 4], other_values, npw.sum_data, "total_{}")
+            stat_summary(other_summary, [3, 4, 0, 1, 2, 5, 6, 7, 8], other_values, npw.mean_data, "mean_{}")
             stat_summary(other_summary, [3, 4, 0, 1, 2, 5, 6, 7, 8], other_values, npw.quantiles_data, "quantiles_{}", q=q)
             stat_summary(other_summary, [3, 4, 0, 1, 2, 5, 6, 7, 8], other_values, npw.median_data, "median_{}")
             stat_summary(other_summary, [3, 4, 0, 1, 2, 5, 6, 7, 8], other_values, npw.std_data, "std_{}")

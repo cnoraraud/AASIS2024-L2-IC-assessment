@@ -39,7 +39,7 @@ def save_figure(title, subfolder=None, overwrite=True):
         plt.clf()
         plt.close()
 
-def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, zero_mode=False, reorder=True, max_t=None, style="discrete", norm="symlog", colorbar=False, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False, color_dict=None):
+def produce_side_by_side_speaker_plot(data, labels, title, reorder=True, savefig=False, overwrite=True, subfolder=None, **kwargs):
     labels = npzr.anonymize_speakers(labels)
     relationship_filter = npzr.has(labels, nt.ANNOTATION_TAG) & ~npzr.has(labels, nt.SPEAKERS)
     S1_filter = npzr.has(labels, nt.SPEAKER1) & relationship_filter
@@ -57,9 +57,9 @@ def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, ze
     D1_common[L1_incommon, :] = D1
     D2_common[L2_incommon, :] = D2
 
-    plot_labels = L_common
-    if npw.is_string(plot_labels):
-            plot_labels = [plot_labels]
+    y_labels = L_common
+    if npw.is_string(y_labels):
+            y_labels = [y_labels]
     fig, (ax1, ax2) = plt.subplots(1, 2)
     fig.set_figwidth(15)
     fig.set_figheight(len(L_common)/4)
@@ -71,14 +71,14 @@ def produce_side_by_side_speaker_plot(data, labels, title, rescale_rows=True, ze
         D1_common, L_common = npzr.reorder_data(D1_common, L_common)
         D2_common, L_common = npzr.reorder_data(D2_common, L_common)
 
-    cc(D1_common, L_common, nt.SPEAKER1, fig=fig, ax=ax1, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar, time=time, dominutelines=dominutelines)
-    cc(D2_common, L_common, nt.SPEAKER2, fig=fig, ax=ax2, reorder=False, rescale_rows=rescale_rows, zero_mode=zero_mode, max_t=max_t, style=style, norm=norm, colorbar=colorbar, time=time, dominutelines=dominutelines)
+    cc(D1_common, L_common, nt.SPEAKER1, fig=fig, ax=ax1, reorder=False, **kwargs)
+    cc(D2_common, L_common, nt.SPEAKER2, fig=fig, ax=ax2, reorder=False, **kwargs)
     if savefig:
         save_figure(title, subfolder=subfolder, overwrite=overwrite)
     else:
         plt.show()
 
-def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True, subfolder=None, time=None, dominutelines=False, color_dict=None):
+def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, max_t=None, style="discrete", norm="symlog", colorbar=False, fig=None, ax=None, savefig=False, overwrite=True, subfolder=None, time="raw", dominutelines=False, color_dict=None, height_mult=0.25):
     individual = fig is None or ax is None
     cmap = None
     if style == "discrete":
@@ -90,7 +90,8 @@ def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, m
     else:
         cmap = style
     plot_data = data
-    plot_labels = labels
+    height = plot_data.shape[0]
+    y_labels = labels
     if isinstance(rescale_rows, tuple) or isinstance(rescale_rows, list):
         vmin = rescale_rows[0]
         vmax = rescale_rows[1]
@@ -133,20 +134,20 @@ def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, m
         vmax = np.nanmax(plot_data)        
     if not isinstance(max_t, type(None)):
         plot_data = ana.apply_method_to_all_features(plot_data, filt.fit_to_size, {"t":max_t, "destructive":True})
-    if reorder:
-        plot_data, plot_labels = npzr.reorder_data(plot_data, plot_labels)
-    if npw.is_string(plot_labels):
-        plot_labels = [plot_labels]
+    if npw.is_string(y_labels) and y_labels != "none":
+        y_labels = [y_labels]
+        if reorder:
+            plot_data, y_labels = npzr.reorder_data(plot_data, y_labels)
     if individual:
         fig, (ax) = plt.subplots(1, 1)
         fig.set_figwidth(20)
-        fig.set_figheight(len(plot_labels)/4)
+        fig.set_figheight(height*height_mult)
     cax = ax.imshow(np.atleast_2d(plot_data), cmap=cmap, aspect='auto', interpolation='none', norm=norm, vmin=vmin, vmax=vmax)
     if colorbar:
         orientation = "vertical"
         if isinstance(colorbar, str):
             orientation = colorbar
-        fig.colorbar(cax, orientation=orientation, aspect=round(1*len(plot_labels)))
+        fig.colorbar(cax, orientation=orientation, aspect=round(1*height))
     if not isinstance(color_dict, type(None)):
             handles = []
             for color_dict_key in color_dict:
@@ -157,18 +158,21 @@ def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, m
             ax.legend(handles=handles, bbox_to_anchor=(0.5, -0.075), ncol=len(handles), loc='center')
     ax.tick_params(top=False, labeltop=False, bottom=True, labelbottom=True, left=False, labelleft=True, right=False, labelright=False)
     ax.set_title(title)
-    if len(plot_labels) > 0:
-        ax.set_yticks(np.arange(len(plot_labels)), labels = plot_labels)
+    if npw.valid(y_labels) and len(y_labels) > 0:
+        ax.set_yticks(np.arange(len(y_labels)), labels = y_labels)
+    else:
+        ax.set_yticks([])
+        ax.set_yticklabels([])
     if time == "mstos":
         x_lims = ax.get_xlim()
-        labels = ax.get_xticklabels()
+        x_labels = ax.get_xticklabels()
         new_labels = []
         new_values = []
-        for i in range(len(labels)):
-            val = int(float(labels[i].get_text().replace("−","-")))
+        for i in range(len(x_labels)):
+            val = int(float(x_labels[i].get_text().replace("−","-")))
             newval = int(round(val/1000))
             new_labels.append(f"{newval}".replace("-","−"))
-            new_values.append(labels[i].get_position()[0])
+            new_values.append(x_labels[i].get_position()[0])
         ax.set_xticks(new_values)
         ax.set_xticklabels(new_labels)
         ax.set_xlim(x_lims)
@@ -193,7 +197,7 @@ def cc(data, labels, title, reorder=True, rescale_rows=False, zero_mode=False, m
         ax.set_xticks(new_values)
         ax.set_xticklabels(new_labels)
         ax.set_xlim(x_lims)
-    elif time == "none":
+    elif isinstance(time, type(None)) or time == "none":
         ax.set_xticks([])
         ax.set_xticklabels([])
     if individual:

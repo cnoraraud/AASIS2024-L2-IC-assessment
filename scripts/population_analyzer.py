@@ -173,9 +173,9 @@ def add_sample_anova_to_dict(obj, samples):
     ag_valid_samples = []
     kruskal_valid_samples = []
     for sample in samples:
-        is_valid_dist_for_anova = npw.valid_dist(sample, total_n=1, unique_n=1)
+        is_valid_dist_for_anova = npw.valid_dist(sample, total_n=2, unique_n=2)
         is_valid_dist_for_ag = npw.valid_dist(sample, total_n=2, unique_n=2)
-        is_valid_dist_for_kruskal = npw.valid_dist(sample, total_n=5, unique_n=1)
+        is_valid_dist_for_kruskal = npw.valid_dist(sample, total_n=5, unique_n=2)
         if is_valid_dist_for_anova:
             anova_valid_samples.append(sample)
         if is_valid_dist_for_ag:
@@ -184,7 +184,7 @@ def add_sample_anova_to_dict(obj, samples):
             kruskal_valid_samples.append(sample)
 
     if len(anova_valid_samples) >= 2:
-        anova = stats.f_oneway(*samples, nan_policy="omit")
+        anova = stats.f_oneway(*anova_valid_samples, nan_policy="omit")
         anova_statistic = anova.statistic
         anova_p_value = anova.pvalue
     if len(ag_valid_samples) >= 2:
@@ -192,9 +192,12 @@ def add_sample_anova_to_dict(obj, samples):
         ag_statistic = ag.statistic
         ag_p_value = ag.pvalue
     if len(kruskal_valid_samples) >= 2:
-        kruskal = stats.kruskal(*kruskal_valid_samples, nan_policy="omit")
-        kruskal_statistic = kruskal.statistic
-        kruskal_p_value = kruskal.pvalue
+        try:
+            kruskal = stats.kruskal(*kruskal_valid_samples, nan_policy="omit")
+            kruskal_statistic = kruskal.statistic
+            kruskal_p_value = kruskal.pvalue
+        except ValueError:
+            dl.log("Attempted kruskal on uniform samples")
 
     obj["anova"].append(anova_statistic)
     obj["anova_p"].append(anova_p_value)

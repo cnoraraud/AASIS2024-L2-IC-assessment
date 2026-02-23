@@ -165,7 +165,7 @@ def add_facial_features_to_data(data_name, D, L):
         new_l = []
         for feature in ff_L:
             feature_clean = feature.lower()
-            new_l.append(nt.create_label(source, tag, f"ff:{feature_clean}"))
+            new_l.append(nt.create_label(source, tag, f"{nt.FACIAL_FEATURE_TYPE}:{feature_clean}"))
         Ds.append(ff_D)
         Ls.append(npw.string_array(new_l))
 
@@ -199,7 +199,7 @@ def add_joysticks_to_data(data_name, D, L):
         for feature in js_L:
             feature_clean = feature.lower()
             new_l.append(
-                nt.create_label(source, tag, f"js:{feature_clean}:{annotator}", extra)
+                nt.create_label(source, tag, f"{nt.JOYSTICK_TYPE}:{feature_clean}-{annotator}", extra)
             )
         Ds.append(js_D)
         Ls.append(npw.string_array(new_l))

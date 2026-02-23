@@ -11,47 +11,8 @@ import summary_reader as sumr
 
 KEY_COLS = ("feature", "channel_1", "channel_2")
 
-CONSTRUCT_DEPRECATED = (
-    ("mean_segment_density", "self (ann.) ff:yaw", ""),
-    ("total_segment_width", "self (ann.) hand:fidget", ""),
-    ("mean_times_relative", "self (ext.) ic:turn", "self (ann.) hand:gesture"),
-    ("mean_segment_delay_count", "self (ext.) ic:turn", "self (ann.) hand:gesture"),
-    ("total_segment_width", "self (ann.) body:back", ""),
-    ("mean_segment_overlap_ratio", "other (ann.) body:back", "self (ann.) body:back"),
-    (
-        "mean_segment_overlap_ratio",
-        "other (ann.) body:forward",
-        "self (ann.) body:forward",
-    ),
-    ("mean_segment_delay_count", "other (ext.) ic:turn", "self (ann.) text:laughing"),
-    ("count_delay", "other (ext.) ic:turn", "self (ann.) ff:surprise"),
-    ("count_delay", "other (ext.) ic:turn", "self (ann.) ff:disgust"),
-    ("count_delay", "other (ext.) ic:turn", "self (ann.) ff:happiness"),
-    ("mean_segment_delay_count", "other (ext.) ic:turn", "self (ann.) ff:surprise"),
-    ("mean_segment_delay_count", "other (ext.) ic:turn", "self (ann.) head:nodding"),
-    ("count_delay", "other (ext.) ic:turn", "self (ann.) text:bc"),
-    ("mean_segment_width", "self (ann.) text:bc", ""),
-    ("mean_delay", "(all) (ann.) speechoverlap", "self (ext.) vad"),
-    ("mean_delay", "self (ann.) text:paral", "self (ext.) vad"),
-    ("mean_delay", "other (ann.) text:paral", "self (ext.) vad"),
-    ("mean_delay", "self (ann.) text:hesitation", "self (ext.) vad"),
-    ("mean_delay", "other (ann.) text:hesitation", "self (ext.) vad"),
-    ("mean_segment_width", "self (ext.) ic:turn", ""),
-    ("mean_segment_overlap_count", "self (ext.) ic:turn", "self (ann.) text:name"),
-    ("mean_segment_overlap_count", "self (ext.) ic:turn", "self (ann.) pause"),
-    ("mean_times_from_end", "self (ext.) ic:turn", "self (ann.) text:name"),
-    ("mean_times_from_end", "self (ext.) ic:turn", "self (ann.) pause"),
-    ("mean_delay", "other (ann.) text:name", "self (ann.) text:text"),
-    ("mean_delay", "other (ann.) pause", "self (ann.) text:text"),
-    ("mean_delay", "self (ann.) text:bc", "self (ext.) ic:turn"),
-    ("mean_delay", "other (ext.) text:text", "self (ext.) text:text"),
-    ("segment_count", "self (ext.) ic:turn", ""),
-    ("segment_count", "self (ann.) text:bc", ""),
-)
-
-
 def load_csv(test_dir, selected_group, csv_to_collate):
-    csv_path = iot.output_csvs_path() / test_dir / selected_group / csv_to_collate
+    csv_path = iot.output_csvs_path() / iot.TEST_FOLDER / test_dir / selected_group / csv_to_collate
     if not os.path.isfile(csv_path):
         return None
     df = pd.read_csv(csv_path, sep="\t")
@@ -98,7 +59,7 @@ def load_csv(test_dir, selected_group, csv_to_collate):
 
 
 def get_csv_list(test_dir, group_keywords, random_choice=True):
-    group_paths = os.listdir(iot.output_csvs_path() / test_dir)
+    group_paths = os.listdir(iot.output_csvs_path() / iot.TEST_FOLDER / test_dir)
     potential_groups = []
     for group_path in group_paths:
         if not isinstance(group_keywords, type(None)):
@@ -116,7 +77,7 @@ def get_csv_list(test_dir, group_keywords, random_choice=True):
         selected_group = random.choice(potential_groups)
     else:
         selected_group = potential_groups[-1]
-    csvs_to_collate = os.listdir(iot.output_csvs_path() / test_dir / selected_group)
+    csvs_to_collate = os.listdir(iot.output_csvs_path() / iot.TEST_FOLDER / test_dir / selected_group)
     return csvs_to_collate, selected_group
 
 
@@ -135,26 +96,29 @@ def get_test_collation(test_dir, group_keywords, random_choice=True):
         concat_df = pd.concat(dfs, ignore_index=True)
     return concat_df
 
+def all_tasks_in_path(path, tasks):
+    if isinstance(tasks, type(None)):
+        return True
+    taskstring = path.split("(")[-1].replace(")", "")
+    all_tasks_found = True
+    for task in nt.task_names_no_prefix(tasks):
+        all_tasks_found = all_tasks_found and (task in taskstring)
+    return all_tasks_found
 
 def get_collations(tasks=None, group_keywords=None, random_choice=True):
-    if not isinstance(tasks, list):
+    if (not isinstance(tasks, type(None))) and (not isinstance(tasks, list)):
         tasks = [tasks]
-    if not isinstance(group_keywords, list):
+    if (not isinstance(group_keywords, type(None))) and (not isinstance(group_keywords, list)):
         group_keywords = [group_keywords]
 
-    output_csvs = os.listdir(iot.output_csvs_path())
+    test_csvs = os.listdir(iot.output_csvs_path() / iot.TEST_FOLDER)
     test_dirs = []
-    for output_csv_path in output_csvs:
-        if not isinstance(tasks, type(None)):
-            taskstring = output_csv_path.split("(")[-1].replace(")", "")
-            if "master" in output_csv_path:
-                continue
-            all_tasks_found = True
-            for task in nt.task_names_no_prefix(tasks):
-                all_tasks_found = all_tasks_found and (task in taskstring)
-            if not all_tasks_found:
-                continue
-        test_dirs.append(output_csv_path)
+    for test_csv_path in test_csvs:
+        if iot.OVERALL_FOLDER in test_csv_path:
+            continue
+        if not all_tasks_in_path(test_csv_path, tasks):
+            continue
+        test_dirs.append(test_csv_path)
 
     test_collations = dict()
     for test_dir in test_dirs:
@@ -167,28 +131,28 @@ def get_collations(tasks=None, group_keywords=None, random_choice=True):
 
 def merge_to_overall(collations):
     collation_keys = sorted(list(collations.keys()))
-    master_df = None
+    overall_df = None
     for i in range(len(collation_keys)):
         current_key = collation_keys[i]
         new_df = collations[current_key]
         new_df[current_key] = True
         if i == 0:
-            master_df = new_df
+            overall_df = new_df
         else:
             prev_key = collation_keys[i - 1]
-            master_df = master_df.merge(
+            overall_df = overall_df.merge(
                 new_df,
                 on=KEY_COLS,
                 how="outer",
                 suffixes=(f" {prev_key}", f" {current_key}"),
             )
-    master_df = master_df.groupby(KEY_COLS).first().reset_index()
+    overall_df = overall_df.groupby(list(KEY_COLS)).first().reset_index()
     test_cols = []
-    for col in master_df.columns:
+    for col in overall_df.columns:
         if col.startswith("test") or col.startswith("Unnamed:"):
             test_cols.append(col)
-    master_df = master_df.drop(columns=test_cols)
-    return master_df
+    overall_df = overall_df.drop(columns=test_cols)
+    return overall_df
 
 
 def merge_conds(conds, any=False):
@@ -279,9 +243,9 @@ def filter_columns(df, bad_keys=("file_path", "Unnamed: 0")):
     return df.drop(columns=bad_cols)
 
 
-def filter_construct(df):
+def filter_construct(df, CONSTRUCT):
     all_conds = []
-    for c_row in CONSTRUCT_DEPRECATED:
+    for c_row in CONSTRUCT:
         cond1 = df["feature"] == c_row[0]
         cond2 = df["channel_1"] == c_row[1]
         if len(c_row[2]) > 0:
@@ -289,9 +253,7 @@ def filter_construct(df):
             cond = cond1 & cond2 & cond3
         else:
             cond = cond1 & cond2
-        if cond.sum() == 0:
-            print(c_row)
-        else:
+        if cond.sum() != 0:
             all_conds.append(cond)
     cond = merge_conds(all_conds, any=True)
     return df[cond]
@@ -340,14 +302,15 @@ def add_hochberg_rejection(df, p_col, alpha=0.05):
     dl.log(f"Hochberg correction stopped at {best_k}.")
     df[f"hochberg rejection ({alpha})"] = ps_c
 
-
 ALL_FEATURES = "all_features"
 VALID_FEATURES = "valid_features"
 BASIC_VALID_FEATURES = "basic_valid_features"
 CONSTRUCT_FEATURES = "construct_features"
 CENTRAL_STATISTIC_NAMES = [
+    "anova_p holistic_cefr",
     "ag_p holistic_cefr",
     "rating_holistic_spearman_corr_p speakerid",
+    "kruskal_p holistic_cefr",
 ]
 MAIN_RATINGS = ["holistic", "IC_score", "turn_taking", "construct_score"]
 
@@ -355,46 +318,55 @@ MAIN_RATINGS = ["holistic", "IC_score", "turn_taking", "construct_score"]
 def create_overall_tables(
     tasks=None, group_keywords=None, central_statistic_names=CENTRAL_STATISTIC_NAMES
 ):
-    task_name = "".join(sorted(["5"]))
+    task_name = "".join(sorted(tasks))
 
     collations = get_collations(tasks, group_keywords)
     overall_df = merge_to_overall(collations)
     overall_df["channel_1"] = overall_df["channel_1"].fillna("")
     overall_df["channel_2"] = overall_df["channel_2"].fillna("")
     overall_df["feature"] = overall_df["feature"].fillna("")
+    
+    dl.write_to_manifest_log(
+        dl.STATISTICS_TYPE,
+        f"Creating overall tables for task group ({task_name})",
+    )
+    filtered_df0 = overall_df.copy()
+
+    produce_dfs({ALL_FEATURES: filtered_df0}, task_name, len(overall_df), central_statistic_name=None, central_statistic=None)
 
     for central_statistic_name in central_statistic_names:
         dl.write_to_manifest_log(
             dl.STATISTICS_TYPE,
-            f"Creating overall tables for task group ({task_name}), focusing on statistic {central_statistic_name}",
+            f"Creating statistic-specific tables for taks group ({task_name}, focusing on statistic {central_statistic_name}",
         )
         central_statistic = f"{central_statistic_name}_({task_name})"
 
-        filtered_df0 = overall_df.copy()
-
-        filtered_df = filtered_df0.copy()
-        filtered_df = filter_missing_required_columns(
-            filtered_df, req_cols=[central_statistic]
+        filtered_df1 = filtered_df0.copy()
+        filtered_df1 = filter_missing_required_columns(
+            filtered_df1, req_cols=[central_statistic]
         )
-        filtered_df = filter_features(filtered_df, feats=["median", "var", "distance"])
-        filtered_df = filter_columns(filtered_df)
+        filtered_df1 = filter_features(filtered_df1, feats=["median", "var", "distance"])
+        filtered_df1 = filter_columns(filtered_df1)
 
-        filtered_df2 = filtered_df.copy()
-        filtered_df2 = filter_channels(filtered_df2, chans=["cep:", "ff:", "energy"])
+        filtered_df2 = filtered_df1.copy()
+        filtered_df2 = filter_channels(filtered_df2, chans=[f"{nt.PHONETIC_TYPE}:", f"{nt.FACIAL_FEATURE_TYPE}:", f"{nt.JOYSTICK_TYPE}"])
 
-        filtered_df3 = filtered_df0.copy()
-        filtered_df3 = filter_construct(filtered_df3)
+        #filtered_df3 = filtered_df0.copy()
+        #filtered_df3 = filter_construct(filtered_df3)
 
         dfs = {
-            ALL_FEATURES: filtered_df0,
-            VALID_FEATURES: filtered_df,
+            VALID_FEATURES: filtered_df1,
             BASIC_VALID_FEATURES: filtered_df2,
-            CONSTRUCT_FEATURES: filtered_df3,
+            #CONSTRUCT_FEATURES: filtered_df3,
         }
+        produce_dfs(dfs, task_name, len(overall_df), central_statistic_name=central_statistic_name, central_statistic=central_statistic)
 
-        alpha = 0.05
-        for df_key in dfs:
-            df = dfs[df_key]
+def produce_dfs(dfs, task_name, n_orig, central_statistic_name=None, central_statistic=None):
+    alpha = 0.05
+    for df_key in dfs:
+        df = dfs[df_key]
+
+        if central_statistic:
             df = (
                 df.sort_values(by=central_statistic)
                 .reset_index()
@@ -405,21 +377,23 @@ def create_overall_tables(
             add_holm_rejection(df, central_statistic, alpha=alpha)
             add_hochberg_rejection(df, central_statistic, alpha=alpha)
 
-            dfs[df_key] = df
+        dfs[df_key] = df
 
-        savepath = iot.output_csvs_path() / f"master_({task_name})"
-        iot.create_missing_folder_recursive(savepath)
-        for df_key in dfs:
+    savepath = iot.output_csvs_path() / iot.OVERALL_FOLDER / f"task_({task_name})"
+    iot.create_missing_folder_recursive(savepath)
+    for df_key in dfs:
+        fullpath = savepath / f"{df_key}.csv"
+        if central_statistic_name:
             fullpath = savepath / f"{df_key}_({central_statistic_name}).csv"
-            df = dfs[df_key]
-            df.to_csv(fullpath, sep="\t")
-            df_n = len(df)
-            dl.write_to_manifest_new_summary_file(
-                dl.STATISTICS_TYPE,
-                fullpath,
-                f"task_group_{task_name}:{len(overall_df)}",
-                f"{df_n}",
-            )
+        df = dfs[df_key]
+        df.to_csv(fullpath, sep="\t")
+        df_n = len(df)
+        dl.write_to_manifest_new_summary_file(
+            dl.STATISTICS_TYPE,
+            fullpath,
+            f"task_group_{task_name}:{n_orig}",
+            f"{df_n}",
+        )
 
 
 def get_y_column(rating):
@@ -442,7 +416,7 @@ def get_keyfields(df):
 
 def get_speaker_data(
     tasks,
-    key_fields=CONSTRUCT_DEPRECATED,
+    key_fields,
     rating_fields=MAIN_RATINGS,
     sample_groupings=None,
     summaries=None,

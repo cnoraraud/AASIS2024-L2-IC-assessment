@@ -23,8 +23,11 @@ def source_data(overwrite = False):
     if folders_exist:
         dl.log("All data folders exist...")
         dl.log("Started fuzzy data sourcing")
-        iot.source_annotated_data_fuzzy(overwrite=overwrite)
+        iot.source_annotated_data_fuzzy(overwrite=overwrite, dryrun=False)
 
+def dryrun_source_data():
+    dl.log("Started fuzzy data sourcing")
+    iot.source_annotated_data_fuzzy(overwrite=False, dryrun=True)
 
 def create_data_files(overwrite = True):
     dl.log("Started creating DLs")
@@ -66,8 +69,8 @@ def run_statistics(overwrite = True, collapse = True):
     )
 
 
-def run_master_table_creation():
-    dl.log("Started creating master tabel")
+def run_overall_table_creation():
+    dl.log("Started creating overll table")
     expa.create_overall_tables(tasks=["5"], group_keywords=["collapsed"])
 
 def run_annotator_analysis():
@@ -83,7 +86,7 @@ def data_pipeline(overwrite = True):
     preprocess_data(overwrite=overwrite)
     run_analysis(overwrite=overwrite)
     run_statistics(overwrite=overwrite)
-    run_master_table_creation()
+    run_overall_table_creation()
     dl.log("Finished processing")
 
 

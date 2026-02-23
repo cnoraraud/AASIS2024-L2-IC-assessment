@@ -73,6 +73,7 @@
 !l2ic_env.yml
 ![Cc]onfig/publicconfig.yml
 ![Cc]onfig/privateconfig.ymlexample
+![Cc]onfig/filechange.ymlexample
 
 ### JUPYTER NOTEBOOK
 *.ipynb

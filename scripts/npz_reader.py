@@ -471,7 +471,7 @@ def get_turn_taking_channels(times, starting, t_max):
 
     labels = []
     for speaker in speakers:
-        labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, f"{nt.AA_TAG}:turn"))
+        labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, f"{nt.IC_TYPE}:floor"))
     L = npw.string_array(labels)
 
     return D, L
@@ -625,10 +625,10 @@ def identify_data_type(D, L, th=MAXDISCRETE):
         label = L[i]
         is_discrete = True
         is_binary = True
-        if "energy" in label or "ff:" in label or "cc:" in label:
+        if (f"{nt.PHONETIC_TYPE}:" in label and "vad" not in label) or f"{nt.FACIAL_FEATURE_TYPE}:" in label or f"{nt.JOYSTICK_TYPE}:" in label:
             is_discrete = False
             is_binary = False
-        elif "text:" in label:
+        elif f"{nt.TEXT_TYPE}:" in label:
             is_binary = False
         elif len(np.unique(D[i, :])) > th:
             is_discrete = False

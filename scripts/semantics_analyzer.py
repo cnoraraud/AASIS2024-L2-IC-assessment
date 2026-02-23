@@ -10,7 +10,6 @@ import naming_tools as nt
 import numpy_wrapper as npw
 from scipy import stats as stat
 import io_tools as iot
-
 def get_bert(name):
     model = transformers.BertForMaskedLM.from_pretrained(name) 
     model.eval()
@@ -30,7 +29,7 @@ def add_tokens(tokenizer, text_segments):
             if word == eafr.LAUGHING_TOKEN:
                 clean_words.append("haha")
             elif word == eafr.GARBAGE_TOKEN:
-                clean_words.append(tokenizer.unk_token)
+                clean_words.append("*")
             else:
                 word = re.sub(r'<.*?>', '', word)
                 if len(word) > 0:
@@ -83,11 +82,14 @@ def combine_tokens(segments):
         input_ids.extend(segment[3])
     return tuple(input_ids)
 
-def get_embeding(model, input_ids):
+def get_embeding(model, input_ids, i=""):
     device = model.device
     input_ids = torch.tensor([input_ids], device=device)
     lhs = model.bert(input_ids).last_hidden_state
-    return lhs[0,-1,:]
+    if isinstance(i, int):
+        return lhs[0, i, :]
+    else:
+        return lhs.mean(dim=1, keepdim=True)[0,0,:]
 
 def add_semantic_features_to_data(data_name, D, L, model=None, tokenizer=None):
     t_max = D.shape[1]
@@ -98,7 +100,7 @@ def add_semantic_features_to_data(data_name, D, L, model=None, tokenizer=None):
     tt_D, tt_L = npzr.get_turn_taking_channels(times, starting, t_max=D.shape[1])
 
     for eaf_path in iot.get_eaf_paths_annotation(data_name):
-        sim_D, sim_L = get_semantic_similarity_data_with_bert(eaf_path, times, tt_D, tt_L, model, tokenizer, t_max=t_max)
+        sim_D, sim_L, _ = get_semantic_similarity_data_with_bert(eaf_path, times, tt_D, tt_L, model, tokenizer, t_max=t_max)
 
         Ds.append(sim_D)
         Ls.append(npw.string_array(sim_L))
@@ -110,7 +112,7 @@ def add_semantic_features_to_data(data_name, D, L, model=None, tokenizer=None):
     return data_name, D_concat, L_concat
 
 # TODO: get_semantic_similarity_data_with_sbert (turkuNLP/sbert-uncased-finnish-paraphrase)
-def get_semantic_similarity_data_with_bert(name, times, tt_D, tt_L, model, tokenizer, t_max=None, recency_times=[10000]):
+def get_semantic_similarity_data_with_bert(name, times, tt_D, tt_L, model, tokenizer, t_max=None, recency_times=[10000], get_words=False):
     eaf = eafr.read_eaf_from_name(name)
     
     # Create segments for similarity analysis
@@ -158,12 +160,15 @@ def get_semantic_similarity_data_with_bert(name, times, tt_D, tt_L, model, token
     sim_L = []
     for speaker in speakers:
         for recency in recency_context:
-            sim_L.append(nt.create_label(speaker, nt.EXTRACTION_TAG, f"sim:recenct({recency})"))
+            sim_L.append(nt.create_label(speaker, nt.EXTRACTION_TAG, f"{nt.SEMANTIC_TYPE}:simrecent({recency})"))
         for other_speaker in turn_context:
             actor = "self" if speaker == other_speaker else "other"
-            sim_L.append(nt.create_label(speaker, nt.EXTRACTION_TAG, f"sim:lastturn({actor})"))
+            sim_L.append(nt.create_label(speaker, nt.EXTRACTION_TAG, f"{nt.SEMANTIC_TYPE}:simlastturn({actor})"))
     sim_L = npw.string_array(sim_L)
     
+    word_performance = None
+    if get_words:
+        word_performance = dict()
     embedding_cache = dict()
     for segment in segments:
         speaker, start_i, end_i, input_ids, text, is_primary_speaker, turn_number = segment
@@ -171,6 +176,8 @@ def get_semantic_similarity_data_with_bert(name, times, tt_D, tt_L, model, token
 
         # find similarity
         word_count = len(input_ids) - 2
+        if get_words:
+            words = text.replace("-", " - ").replace("*", " * ").replace("  ", " ").split(" ")
         if word_count >= 1:
             comparisons = []
             for recency in recency_context:
@@ -217,6 +224,12 @@ def get_semantic_similarity_data_with_bert(name, times, tt_D, tt_L, model, token
                         if comparison_embedding is None:
                             continue
                         similarity = cosine_similarity(sub_embedding, comparison_embedding, dim=-1).detach().numpy()
+                        if get_words:
+                            if len(words) == word_count:
+                                word = words[i-1]
+                                if word not in word_performance:
+                                    word_performance[word] = []
+                                word_performance[word].append(similarity.item())
                         sim_D[s_id*fc + j, sub_start_i:sub_end_i] = similarity
         
         # update context
@@ -240,5 +253,5 @@ def get_semantic_similarity_data_with_bert(name, times, tt_D, tt_L, model, token
             turn_context[speaker][-1].append(segment)
     
     embedding_cache.clear()
-    return sim_D, sim_L
+    return sim_D, sim_L, word_performance
         

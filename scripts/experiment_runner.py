@@ -144,7 +144,7 @@ def test(
         sanitized_feature_name = nt.sanitize_filename(feature_name).lower()
         sanitized_grouping_name = nt.sanitize_filename(grouping_name).lower()
         savepath = (
-            iot.output_csvs_path() / f"{sanitized_grouping_name}" / f"{split_name}"
+            iot.output_csvs_path() / iot.TEST_FOLDER / f"{sanitized_grouping_name}" / f"{split_name}"
         )
         iot.create_missing_folder_recursive(savepath)
 

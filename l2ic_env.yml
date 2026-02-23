@@ -18,6 +18,8 @@ dependencies:
   - defusedxml
   - scipy
   - pip
+  - openpyxl
+  - py-xgboost
   - pip:
     - pympi-ling
     - ipykernel
@@ -26,3 +28,5 @@ dependencies:
     - torchcodec --index-url=https://download.pytorch.org/whl/cu126
     - nltk
     - python-Levenshtein
+    - pyglottolog
+    - isocodes

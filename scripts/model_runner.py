@@ -6,6 +6,7 @@ import torch.nn as nn
 import numpy as np
 import pandas as pd
 import io_tools as iot
+from collections import Counter
 from torch.utils.data import DataLoader
 from datetime import datetime
 from torcheval.metrics.functional import multiclass_accuracy
@@ -13,6 +14,7 @@ import os
 import data_logger as dl
 import keywords_recipes as kwr
 import torch_wrapper as tw
+import pickle
 
 RS_EVAL = 4
 RS_TEST = 10
@@ -42,12 +44,7 @@ def create_dataloaders(datasets, recipe, collate_fn, shuffle=True):
     dataloaders["test_batches"] = len(dataloaders["test_dataloader"])
     return dataloaders
 
-def prepare_data(data_selection, recipe):
-    speakers = dfs.get_all_speaker_splits(
-        data_selection.get("eval_split_seed"), data_selection.get("test_split_seed"),
-        data_selection.get("eval_split_ratio"), data_selection.get("test_split_ratio"),
-        recipe.get(kwr.tasks)
-    )
+def prepare_data(speakers, recipe):
     n, e, datasets = dataset_load(speakers, recipe)
     dataloaders = create_dataloaders(datasets, recipe, cr.collate_stack)
     
@@ -238,7 +235,7 @@ def report_epoch(set_id, name, epoch, model, train_losses, test_losses, epoch_tr
     if report:
         append_to_csv([row], set_id, file_name=f"epoch_report_{name}.csv")
 
-def report_model_development(model, set_id, recipe, results, data_selection, data, report=True):
+def report_model_development(model, set_id, recipe, results, datasplit, data, report=True):
     model_id = hex(id(model))
     total_params, trainable_params = tw.get_param_counts(model)
     train_distribution = data["train_distribution"]
@@ -250,10 +247,10 @@ def report_model_development(model, set_id, recipe, results, data_selection, dat
         "started": results["started"],
         "ended": results["ended"],
         "dataset": recipe.get(kwr.label_file),
-        "eval_split_seed": data_selection.get("eval_split_seed"),
-        "test_split_seed": data_selection.get("test_split_seed"),
-        "eval_split_ratio": data_selection.get("eval_split_ratio"),
-        "test_split_ratio": data_selection.get("test_split_ratio"),
+        "eval_split_seed": datasplit.eval_split_seed,
+        "test_split_seed": datasplit.test_split_seed,
+        "eval_split_ratio": datasplit.eval_split_ratio,
+        "test_split_ratio": datasplit.test_split_ratio,
         "learning_rate": recipe.get(kwr.learning_rate),
         "weight_decay": recipe.get(kwr.weight_decay),
         "batch_size": recipe.get(kwr.batch_size),
@@ -366,42 +363,112 @@ def get_set_id(name):
     timestamp = dl.get_timestamp(clean=True)
     return f"t{timestamp}_p{pid}_{name}"
 
+def limit_df_by_channels(df, th=3):
+    ch1 = Counter(df["channel_1"].value_counts().to_dict())
+    ch2 = Counter(df["channel_2"].fillna("none").value_counts().to_dict())
+    ch1c = Counter()
+    for l in ch1.keys():
+        val = ch1[l]
+        if val >= th:
+            ch1c[l] = ch1[l]
+    ch2c = Counter()
+    for l in ch2.keys():
+        val = ch2[l]
+        if val >= th:
+            ch2c[l] = ch2[l]
+    chac = ch1c + ch2c
+    chacl  = list(chac.keys())
+    final_df = df[(df["channel_1"].isin(chacl)) & (df["channel_2"].isin(chacl))]
+    return final_df
+
+def save_keyfields(kf, ver=""):
+    file_path = iot.output_csvs_path() / iot.SELECTINFO_FOLDER
+    iot.create_missing_folder_recursive(file_path)
+    with open(file_path / f"keyfields{ver}.pickle", "wb") as f:
+        pickle.dump(kf, f)
+def load_keyfields(ver=""):
+    kf = []
+    file_path = iot.output_csvs_path() / iot.SELECTINFO_FOLDER
+    with open(file_path / f"keyfields{ver}.pickle", "rb") as f:
+        kf = pickle.load(f)
+    return kf
+
+class Datasplit(object):
+
+    def __init__(self, tasks=["task5"], eval_split_seed = 4, test_split_seed = 10, eval_split_ratio = 0.2, test_split_ratio = 0.2, n = -1, fold_n=1):
+        self.tasks = tasks
+        self.eval_split_seed = eval_split_seed
+        self.test_split_seed = test_split_seed
+        self.eval_split_ratio = eval_split_ratio
+        self.test_split_ratio = test_split_ratio
+        self.seed_mult = 117
+        self.k = 0
+        self.n = n
+        self.fold_n = fold_n
+    
+    def set_seed_mult(self, mult):
+        self.seed_mult = mult
+
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        return self.next()
+    
+    def __getitem__(self, k):
+        eval_split_seed = self.eval_split_seed
+        test_split_seed = self.test_split_seed + self.seed_mult * k
+        eval_split_ratio = self.eval_split_ratio
+        test_split_ratio = self.test_split_ratio
+        return dfs.get_all_speaker_splits(eval_split_seed, test_split_seed, eval_split_ratio, test_split_ratio, self.tasks, self.fold_n)
+
+    def next(self):
+        if self.k < self.n or self.n < 0:
+            self.k += 1
+            return self[self.k - 1]
+        raise StopIteration()
+
+
 def experiment_model(recipe):
     name = recipe.get(kwr.model_name) + recipe.get(kwr.recipe_name)
     set_id = get_set_id(name)
     
     iterations = recipe.get(kwr.iterations)
     dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Experimenting with model. Iterations count: {iterations}", 0)
+    datasplit = Datasplit()
     for iteration in range(iterations):
-        data_selection = {
-            "eval_split_seed": RS_EVAL,
-            "test_split_seed": RS_TEST + iteration,
-            "eval_split_ratio": FRAC_EVAL,
-            "test_split_ratio": FRAC_TEST,
-        }
-        n, e, data = prepare_data(data_selection, recipe)
-        weights = torch.Tensor(cr.get_weights_from_distribution(data["train_distribution"], recipe.get(kwr.weight_type), recipe.get(kwr.weight_power))).to(device=recipe.get(kwr.device), dtype=recipe.get(kwr.dtype))
+        speakers = next(datasplit)
+        folds = speakers["folds"]
+        for fold in range(folds):
+            fold_speakers = {
+                "eval_speakers": speakers["eval_speakers"],
+                "train_speakers": speakers["train_speakers"][fold],
+                "test_speakers": speakers["test_speakers"][fold],
+            }
+            n, e, data = prepare_data(fold_speakers, recipe)
+            weights = torch.Tensor(cr.get_weights_from_distribution(data["train_distribution"], recipe.get(kwr.weight_type), recipe.get(kwr.weight_power))).to(device=recipe.get(kwr.device), dtype=recipe.get(kwr.dtype))
 
-        started = datetime.now()
-        model, loss_fn, optimizer = prepare_model(n, e, recipe, weights)
-        
-        if recipe.get(kwr.device)=="cuda":
-            pass
-            #model.compile() #TODO: Figure out
-        model_name = get_model_name(model)
-        train_speakers_joined = ", ".join(str(x) for x in data["train_speakers"])
-        test_speakers_joined = ", ".join(str(x) for x in data["test_speakers"])
-        dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Training model {iteration + 1} out of {iterations} in set \'{set_id}\' with test split seed {data_selection["test_split_seed"]}", 0)
-        dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Train distribution: {data["train_distribution"]}", 0)
-        dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Test distribution: {data["test_distribution"]}", 0)
-        dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Train speakers:\n{train_speakers_joined}", 0)
-        dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Test speakers:\n{test_speakers_joined}", 0)
-        dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"{model_name}", 0)
-        dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"{model}", 0)
-        dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"{optimizer}", 0)
-        results = develop_model(set_id, name, model, data["train_dataloader"], data["test_dataloader"], loss_fn, optimizer, recipe)
-        ended = datetime.now()
-        results["started"] = started
-        results["ended"] = ended
+            started = datetime.now()
+            model, loss_fn, optimizer = prepare_model(n, e, recipe, weights)
+            
+            if recipe.get(kwr.device)=="cuda":
+                pass
+                #model.compile() #TODO: Figure out
+            model_name = get_model_name(model)
+            train_speakers_joined = ", ".join(str(x) for x in data["train_speakers"])
+            test_speakers_joined = ", ".join(str(x) for x in data["test_speakers"])
+            dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Training model {iteration + 1} out of {iterations} in set \'{set_id}\' with test split seed {speakers["test_split_seed"]}", 0)
+            dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Fold {fold + 1} out of {folds}")
+            dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Train distribution: {data["train_distribution"]}", 0)
+            dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Test distribution: {data["test_distribution"]}", 0)
+            dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Train speakers:\n{train_speakers_joined}", 0)
+            dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"Test speakers:\n{test_speakers_joined}", 0)
+            dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"{model_name}", 0)
+            dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"{model}", 0)
+            dl.write_to_manifest_log(dl.MODEL_TRAINING_TYPE, f"{optimizer}", 0)
+            results = develop_model(set_id, name, model, data["train_dataloader"], data["test_dataloader"], loss_fn, optimizer, recipe)
+            ended = datetime.now()
+            results["started"] = started
+            results["ended"] = ended
 
-        report_model_development(model, set_id, recipe, results, data_selection, data, report=True)
+            report_model_development(model, set_id, recipe, results, datasplit, data, report=True)

@@ -9,8 +9,7 @@ import npz_reader as npzr
 import numpy as np
 import pandas as pd
 import summary_reader as sumr
-
-
+import math
 def clean_no_permissions(df):
     new_df = df
     perm1 = set(np.unique(df[df["Aasis study"] != 1]["SpeakerID"].values).tolist())
@@ -22,7 +21,9 @@ def clean_no_permissions(df):
     )
     all_ids = perm1 or perm2 or perm3
     other_ids = set()
+    
     for perm_id in all_ids:
+        #TODO: BROKEN LOGIC, this is not consistent
         if perm_id % 2 == 0:
             other_ids.add(perm_id - 1)
         else:
@@ -254,8 +255,11 @@ def get_dyad_df(tasks):
     )
 
 
-def get_df_split(df, rs, frac):
+def get_df_splits(df, rs, frac, fold_n=1):
+    n = len(df)
     eval_n = round(len(df) * frac)
+    eval_n = max(eval_n, 1)
+    eval_n = min(eval_n, n-1)
     df_split = (
         df.sample(random_state=rs, frac=1)
         .reset_index()
@@ -263,13 +267,22 @@ def get_df_split(df, rs, frac):
         .reset_index()
         .drop(columns="index")
     )
-    df_1 = df_split[0:eval_n].reset_index().drop(columns="index")
-    df_2 = df_split[eval_n:].reset_index().drop(columns="index")
-    return df_1, df_2
+    folds = []
+    fold_n = min(math.ceil(n / eval_n), fold_n)
+    fold_n = max(fold_n, 1)
+    fold_n = min(fold_n, n)
+    for fold in range(fold_n):
+        eval_start = fold*eval_n
+        eval_end = (fold+1)*eval_n
+        
+        eval_df = df_split[eval_start:eval_end].reset_index().drop(columns="index")
+        train_df = (pd.concat([df_split[0:eval_start], df_split[eval_end:]])).reset_index().drop(columns="index")
+        folds.append([eval_df, train_df])
+    return folds
 
 def get_speaker_split(tasks, rs, frac=0.1):
     dyad_df = get_dyad_df(tasks)
-    return get_df_split(df=dyad_df, rs=rs, frac=frac)
+    return get_df_splits(df=dyad_df, rs=rs, frac=frac)[0]
 
 def filter_speakers(df, speaker_list):
     cond = df["speaker"].isin(speaker_list)
@@ -291,12 +304,19 @@ def prepared_dev_eval(data_df, tasks, rs):
 def speaker_df_to_speaker_list(df):
     return list(set(df["speaker_1"].unique().tolist()) | set(df["speaker_2"].unique().tolist()))
 
-def get_all_speaker_splits(rs_eval, rs_test, frac_eval, frac_test, tasks):
+def get_all_speaker_splits(rs_eval, rs_test, frac_eval, frac_test, tasks, fold_n=1):
     eval_df, dev_df = get_speaker_split(tasks=tasks, rs=rs_eval, frac=frac_eval)
-    test_df, train_df  = get_df_split(df=dev_df, rs=rs_test, frac=frac_test)
+    folds = get_df_splits(df=dev_df, rs=rs_test, frac=frac_test, fold_n=fold_n)
     speakers = {}
-    speakers["test_speakers"] = speaker_df_to_speaker_list(test_df)
-    speakers["train_speakers"] = speaker_df_to_speaker_list(train_df)
+    test_speakers = []
+    train_speakers = []
+    for test_df, train_df in folds:
+        test_speakers.append(speaker_df_to_speaker_list(test_df))
+        train_speakers.append(speaker_df_to_speaker_list(train_df))
+    speakers["test_split_seed"] = rs_test
+    speakers["folds"] = min(len(test_speakers), len(train_speakers))
+    speakers["test_speakers"] = test_speakers
+    speakers["train_speakers"] = train_speakers
     speakers["eval_speakers"] = speaker_df_to_speaker_list(eval_df)
     return speakers
 

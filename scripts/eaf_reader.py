@@ -29,7 +29,7 @@ def eaf_info(eaf_path):
     return metadata["size"]
 
 
-def sanitize(name):
+def sanitize(name, loc=False):
     sanitized_name = name
     sanitized_number = None
 
@@ -41,7 +41,7 @@ def sanitize(name):
         namespace = "_".join(name.split("_")[1:])
         sanitized_number = numspace
 
-    # removes hyphens and underscores
+    # removes hyphens and underscores, lowercases
     sanitized_name = "".join(
         filter(
             lambda x: x.isalpha() or x.isdigit() or x == ":" or x == "<" or x == ">",
@@ -53,9 +53,33 @@ def sanitize(name):
     sanitized_name = sanitized_name.replace("pauses", "pause")
     sanitized_name = sanitized_name.replace("overlaps", "overlap")
     sanitized_name = sanitized_name.replace("hands", "hand")
+    if loc and name != sanitized_name:
+        dl.write_to_manifest_log(dl.CORRECTION_TYPE, f"Correction: {name} => {sanitized_name} @ {loc}")
 
     return sanitized_name, sanitized_number
 
+def sanitize_label(label, loc=False):
+    sanitized_label = label.lower()
+    sanitized_label = sanitized_label.replace("<", "")
+    sanitized_label = sanitized_label.replace(">", "")
+    sanitized_label = sanitized_label.strip()
+    if " " in sanitized_label:
+        sanitized_label = "other"
+    if "other" in sanitized_label:
+        sanitized_label = "other"
+    if "nod" in sanitized_label:
+        sanitized_label = "nodding"
+    if len(sanitized_label) <= 1:
+        sanitized_label = "other"
+    if "pauses" in sanitized_label:
+        sanitized_label = "pause"
+    if "overlaps" in sanitized_label:
+        sanitized_label = "overlap"
+    if "hands" in sanitized_label:
+        sanitized_label = "hand"
+    if loc and label != sanitized_label:
+        dl.write_to_manifest_log(dl.CORRECTION_TYPE, f"Correction: {label} => {sanitized_label} @ {loc}")
+    return sanitized_label
 
 def section_text(text):
     tp = 0
@@ -115,39 +139,17 @@ def find_text_tokens(text, textual_tokens="ignore", nontextual_tokens="ignore"):
         tokens[tag] = counter[tag]
     return tokens
 
-
-def sanitize_label(label):
-    sanitized_label = label.lower()
-    sanitized_label = sanitized_label.replace("<", "")
-    sanitized_label = sanitized_label.replace(">", "")
-    sanitized_label = sanitized_label.strip()
-    if " " in sanitized_label:
-        sanitized_label = "other"
-    if "other" in sanitized_label:
-        sanitized_label = "other"
-    if "nod" in sanitized_label:
-        sanitized_label = "nodding"
-    if len(sanitized_label) <= 1:
-        sanitized_label = "other"
-    return sanitized_label
-
-
 BACKCHANNEL_TOKEN = "<bc>"
 TRANSLATION_TOKEN = "<trans>"
 GARBAGE_TOKEN = "<garbage>"
 LAUGHING_TOKEN = "<laughing>"
 PARAL_TOKEN = "<paral>"
+HESITATION_TOKEN = "<hesitation>"
 
-def sanitize_text(text, collapse_languages=True):
+def sanitize_text(text, collapse_languages=True, loc=False):
     sanitized_text = text.lower().strip()
 
-    if collapse_languages:
-        sanitized_text = sanitized_text.replace("<transen>", "<trans>")
-        sanitized_text = sanitized_text.replace("<transjp>", "<trans>")
-        sanitized_text = sanitized_text.replace("<transfr>", "<trans>")
-
     substitution_map = {
-        TRANSLATION_TOKEN: ["<transen>", "<transjp>", "<transfr>", "<transsv>"],
         BACKCHANNEL_TOKEN: ["<bacch>", "<backh>", "<bakch>", "<backch>", "<bachch>"],
         GARBAGE_TOKEN: [
             "<gabage>",
@@ -159,7 +161,7 @@ def sanitize_text(text, collapse_languages=True):
             "<bgnoise>",
         ],
         LAUGHING_TOKEN: ["<laugh>", "<laughin>", "<laught>"],
-        "<hesitation>": [
+        HESITATION_TOKEN: [
             "<hesitaiton>",
             "<hestitation>",
             "<hesiation>",
@@ -167,27 +169,34 @@ def sanitize_text(text, collapse_languages=True):
             "<hesitiation>",
             "<hesitaion>",
             "<hesittaion>",
+            "<hesitationhesitation>"
         ],
         PARAL_TOKEN: ["<para>"],
     }
+    if collapse_languages:
+        substitution_map[TRANSLATION_TOKEN] = ["<transen>", "<transjp>", "<transfr>", "<transsv>"]
 
     for substitution in substitution_map:
-        if substitution == "<trans>" and not collapse_languages:
-            continue
-        sequences = substitution_map[substitution]
-        for sequence in sequences:
+        for sequence in substitution_map[substitution]:
+            if sequence not in sanitized_text:
+                continue
+            if loc: 
+                dl.write_to_manifest_log(dl.CORRECTION_TYPE, f"Correction: {sequence} => {substitution} @ {loc}")
             sanitized_text = sanitized_text.replace(sequence, substitution)
 
     return sanitized_text
 
 
-def get_labels_for_tier(tier, tier_annotations):
+def get_labels_for_tier(tier, tier_annotations, loc=False):
     labels = dict()
     for t0, t1, string in tier_annotations:
         tokens_values = {string: True}
         if tier == "text":
+            loc_t = False
+            if loc:
+                loc_t = f"{loc}[{tier}:{t0}-{t1}]"
             tokens_values = find_text_tokens(
-                sanitize_text(string), textual_tokens="sum_words", nontextual_tokens="sum_words"
+                sanitize_text(string, loc=loc_t), textual_tokens="sum_words", nontextual_tokens="sum_words"
             )
 
         for token_key in tokens_values:
@@ -195,7 +204,10 @@ def get_labels_for_tier(tier, tier_annotations):
             value = tokens_values[token_key]
             if isinstance(value, bool):
                 value = int(value)
-            label = sanitize_label(label)
+            loc_t = False
+            if loc:
+                loc_t = f"{loc}[{tier}:{t0}-{t1}]"
+            label = sanitize_label(label, loc=loc_t)
             if label not in labels:
                 labels[label] = []
             labels[label].append((t0, t1, string, value))
@@ -216,7 +228,7 @@ def add_annotations_to_timeseries(a, annotations):
         add_annotation_to_timeseries(a, annotation)
 
 
-BLOCK_LIST = ["text:other", "text:hesitationhesitation", "hand:other", "text:bgnoise"]
+BLOCK_LIST = [f"{nt.TEXT_TYPE}:other", f"{nt.TEXT_TYPE}:hesitationhesitation", f"{nt.TEXT_TYPE}:other", f"{nt.TEXT_TYPE}:bgnoise"]
 
 
 def block_listed(key, name="unknown eaf"):
@@ -227,21 +239,6 @@ def block_listed(key, name="unknown eaf"):
             )
             return True
     return False
-
-
-def sanitize_labels(labels, tag=""):
-    labels = npw.string_array(labels)
-    sanitized_labels = np.empty(labels.shape, dtype=labels.dtype)
-    for i, label in np.ndenumerate(labels):
-        sanitized_label, sanitized_number = sanitize(label)
-        if sanitized_number is None:
-            sanitized_number = "[all]"
-        tagspace = " "
-        if len(tag) > 0:
-            tagspace = " " + tag + " "
-        sanitized_labels[i] = f"{sanitized_number}{tagspace}{sanitized_label}"
-    return sanitized_labels
-
 
 def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
     if isinstance(width, type(None)):
@@ -257,7 +254,7 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
 
     annotation_series = dict()
     for tier in tiers:
-        sanitized_tier, sanitized_number = sanitize(tier)
+        sanitized_tier, sanitized_number = sanitize(tier, loc=name)
 
         if not isinstance(sanitized_number, type(None)):
             tier_name = f"{sanitized_number}_{sanitized_tier}"
@@ -265,7 +262,7 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
             tier_name = sanitized_tier
 
         if sanitized_tier in LABELLED_TIERS:
-            label_annotations = get_labels_for_tier(sanitized_tier, annotations[tier])
+            label_annotations = get_labels_for_tier(sanitized_tier, annotations[tier], loc=name)
 
             for label in label_annotations:
                 series = np.zeros(width)
@@ -276,6 +273,7 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
                 if key not in annotation_series:
                     annotation_series[key] = np.zeros(width)
                 annotation_series[key] = annotation_series[key] + series
+        
         if sanitized_tier not in LABELLED_TIERS:
             series = np.zeros(width)
             key = f"{tier_name}"
@@ -294,6 +292,12 @@ def eaf_to_data_matrix(eaf, width=None, name="unknown eaf"):
         feature, source = sanitize(label)
         if isinstance(source, type(None)):
             source = nt.SPEAKERS
+        # repair for unknown labels, assumes shared label
+        if source == nt.SPEAKERNONE:
+            source = nt.SPEAKERS
+        # repair for untyped labels, assumes IC
+        if ":" not in feature:
+            feature = f"{nt.IC_TYPE}:{feature}"
         labels.append(nt.create_label(source, nt.ANNOTATION_TAG, feature))
 
     labels = npw.string_array(labels)

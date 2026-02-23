@@ -17,8 +17,11 @@ def get_dataset_distribution(dataset):
     ys = dataset.chart_labels["y"]
     yo = dataset.chart_labels["yo"]
     y = pd.concat([ys, yo], ignore_index=True)
-    y = y.fillna(y.mean()).round().astype("int")
-    counts = y.value_counts()
+    y = y.fillna(y.mean())
+    return get_y_distribution(y)
+
+def get_y_distribution(y):
+    counts = y.round().astype("int").value_counts()
     all_counts = [0, 0, 0, 0, 0, 0]
     for i, grade in enumerate([1, 2, 3, 4, 5, 6]):
         if grade in counts:
@@ -33,8 +36,15 @@ def get_weights_from_distribution(distribution, type="p", k=1):
     elif type == "cum_p":
         w = np.nancumsum(w)[:-1]
         w = w/w_sum
-    w_mean = np.nanmean(w)
-    weights = np.power(w/w_mean, k)
+    elif type == "bal":
+        w = np.nan_to_num(np.divide(w_sum - w, np.clip(len(w) * w, 1e-6, None)))
+
+    if type == "p" or type == "cum_p":
+        w_mean = np.nanmean(w)
+        w = w/w_mean
+        weights = np.power(w, k)
+    elif type == "bal":
+        weights = w
     return weights
 
 def preprocess_for_nn(D, reduce_factor=5, filter_width=2500, do_norm=False, do_ma=False):

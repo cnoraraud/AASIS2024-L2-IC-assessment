@@ -3,6 +3,7 @@ import io_tools as iot
 from datetime import datetime
 import pathlib as p
 import os
+from collections import Counter
 
 def get_process_id():
     return os.getpid()
@@ -58,6 +59,7 @@ CHART_PREPROCESSING_TYPE = "chart_preprocessing"
 MODEL_TRAINING_TYPE = "model_training"
 DEBUG_TYPE = "debug"
 DEFAULT_TYPE = "default"
+CORRECTION_TYPE = "correction"
 
 
 def write_to_manifest_log(manifest_type=DEFAULT_TYPE, log_string="unknown", level=1, end="\n"):
@@ -142,12 +144,16 @@ class ManifestSession:
         self.new = 0
         self.bad = 0
         self.updated = 0
+        self.tag_counter = Counter()
         self.write(f"STARTING fuzzy copy {datetime.now()}", 0)
         self.write(f"CONFIG: version {version} from {date}", 1)
         self.write(f"FROM: {aasis_path} TO: {personal_path}", 1)
 
     def end(self):
         self.write(f"STATS: good {self.good} bad {self.bad} new {self.new}", 1)
+        for tag in self.tag_counter:
+            val = self.tag_counter[tag]
+            self.write(f"new {tag}: {val}")
         self.write(f"FINISHING copy {datetime.now()}", 0)
 
     def sessions_found(self):
@@ -165,10 +171,12 @@ class ManifestSession:
         self.good += 1
         self.updated = 0
         self.name = "unknown"
+        self.tag_counter.clear()
 
     def new_file(self, tag_name, file_name):
         self.write(f"{self.name}: {tag_name} succeeded ({file_name})", 1)
         self.updated += 1
+        self.tag_counter[tag_name] += 1
 
     def error(self, e):
         self.write(f"{self.name}: failed\n\t\terror: {e}", 1)

@@ -14,10 +14,19 @@ SPEAKER2 = "S002"
 SPEAKERS = "[all]"
 SPEAKERNONE = "[none]"
 
-AA_TAG = "ic"
 ANNOTATION_TAG = "(ann.)"
 EXTRACTION_TAG = "(ext.)"
 UNKNOWN_TAG = "(unk.)"
+
+IC_TYPE = "ic"
+FACIAL_FEATURE_TYPE = "ff"
+TEXT_TYPE = "text"
+PHONETIC_TYPE = "phon"
+BODY_TYPE = "body"
+HAND_TYPE = "hand"
+HEAD_TYPE = "head"
+SEMANTIC_TYPE = "sem"
+JOYSTICK_TYPE = "js"
 
 COLLAPSE_NONE = "none"
 COLLAPSE_INITIATOR_LABELS = "initiator"
@@ -57,6 +66,8 @@ def is_speaker_related(speaker, value):
     return False
 
 def switch_label_speaker(label, speaker):
+    if isinstance(label,float):
+        return ""
     if " " not in label:
         return label
     return f"{speaker} {" ".join(label.split(" ")[1:])}"
@@ -67,6 +78,8 @@ def get_S_label(label, reference_S):
     return switch_label_speaker(label, label_S)
 
 def get_session_role(label):
+    if isinstance(label, float):
+        return None
     if " " not in label:
         return None
     candidate = label.split(" ")[0]

@@ -44,7 +44,7 @@ if sourcing:
     if folders_exist:
         dl.log("All data folders exist...")
         dl.log("Started fuzzy data sourcing")
-        iot.source_annotated_data_fuzzy(overwrite=overwrite)
+        iot.source_annotated_data_fuzzy(overwrite=overwrite, dryrun=False)
 if create_data:
     dl.log("Started creating DLs")
     proc.create_all_data(overwrite=overwrite)
@@ -67,6 +67,6 @@ if statistics:
     dl.log("Started running statistics")
     proc.run_statistics(overwrite=overwrite, collapse=True)
 if table:
-    dl.log("Started master table creation")
-    proc.run_master_table_creation()
+    dl.log("Started overall table creation")
+    proc.run_overall_table_creation()
 dl.log("Finished processing")

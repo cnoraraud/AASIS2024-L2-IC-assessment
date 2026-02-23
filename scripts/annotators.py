@@ -145,7 +145,7 @@ def create_figures(anchor_samples, unique_groups, annotator_dict, color_k=2):
         group = anchor_samples[anchor_samples["name"] == group_name]
         annotator_len = len(group["annotator"].unique())
         D, L = get_group_dif_rgb_DL(group, annotator_dict, color_k = color_k)
-        D, L = npzr.do_label_select(D, L, npzr.has(L, "(ann.)") & npzr.nothas(L, "ff:") & npzr.nothas(L, "js:"))
+        D, L = npzr.do_label_select(D, L, npzr.has(L, f"{nt.ANNOTATION_TAG}") & npzr.nothas(L, f"{nt.FACIAL_FEATURE_TYPE}:") & npzr.nothas(L, f"{nt.JOYSTICK_TYPE}:"))
         subfolder = "annotator_comparison"
         dd.cc(D, L, f"Annotator overlap in \"{group_name}\"", norm=None, color_dict=annotator_dict, savefig=True, subfolder=subfolder)
         dl.write_to_manifest_new_summary_file(
@@ -167,7 +167,7 @@ def create_table(anchor_samples, unique_groups, annotator_dict, unique_annotator
         D, L = get_group_dif_DL(group, annotator_dict)
         channel_corrs = []
         channel_sums = []
-        label_filter = npzr.has(L, "(ann.)") & npzr.nothas(L, "ff:") & npzr.nothas(L, "js:")
+        label_filter = npzr.has(L, f"{nt.ANNOTATION_TAG}") & npzr.nothas(L, f"{nt.FACIAL_FEATURE_TYPE}:") & npzr.nothas(L, f"{nt.JOYSTICK_TYPE}:")
         for c in range(D.shape[1]):
             if not label_filter[c]:
                 continue

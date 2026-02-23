@@ -206,13 +206,13 @@ def wavs_to_data_matrix(
                 ceps = data_to_t_max(ceps, t_max, fit_policy=fit_policy)
 
             datas.append(energy)
-            labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "energy"))
+            labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, f"{nt.PHONETIC_TYPE}:energy"))
             datas.append(vad)
-            labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, "vad"))
+            labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, f"{nt.PHONETIC_TYPE}:vad"))
             if not skip_ceps:
                 for i in range(num_ceps):
                     datas.append(ceps[:, i])
-                    cep_name = f"cep:{i + first_cep}"
+                    cep_name = f"{nt.PHONETIC_TYPE}:cep{i + first_cep}"
                     labels.append(nt.create_label(speaker, nt.EXTRACTION_TAG, cep_name))
 
     return np.array(datas).T, npw.string_array(labels)

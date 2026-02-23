@@ -32,6 +32,9 @@ def get_config_public():
     with open((find_config_directory() / "publicconfig.yml"), "r") as file:
         return yaml.safe_load(file)
 
+def get_config_namechange():
+    with open((find_config_directory() / "namechange.yml"), "r") as file:
+        return yaml.safe_load(file)
 
 def get_config_version():
     config = get_config_private()
@@ -52,99 +55,120 @@ def aasis_data_path(key):
     data_path = aasis_path / config["paths"]["main_data"][key]
     return data_path
 
+WAVS = "wavs"
+CSVS = "csvs"
+MP4S = "mp4s"
+PYFEAT_CSVS = "pyfeat_csvs"
+JOYSTICK_CSVS = "joystick_csvs"
+RATINGS_CSVS = "ratings_csvs"
+ANNOTATION_EAFS = "annotation_eafs"
+DL_NPZS = "DL_npzs"
+SUMMMARY_NPYS = "summary_npys"
+SPECIAL_DATA = "special_data"
+FIGS = "figs"
+OUTPUT_CSVS = "output_csvs"
+CHART_PTS = "chart_pts"
+LABEL_CSVS = "label_csvs"
+TRAIN_REPORTS = "train_reports"
+TORCH_MODELS = "torch_models"
+MANIFESTS = "manifests"
 
 def aasis_wavs_path():
-    return aasis_data_path("wavs")
+    return aasis_data_path(WAVS)
 
 
 def aasis_eafs_path():
-    return aasis_data_path("eafs")
+    return aasis_data_path(ANNOTATION_EAFS)
 
 
 def aasis_csvs_path():
-    return aasis_data_path("csvs")
+    return aasis_data_path(CSVS)
 
 
 def aasis_mp4s_path():
-    return aasis_data_path("mp4s")
+    return aasis_data_path(MP4S)
 
 
 def aasis_pyfeat_csvs_path():
-    return aasis_data_path("pyfeat_csvs")
+    return aasis_data_path(PYFEAT_CSVS)
 
 
 def aasis_joystick_csvs_path():
-    return aasis_data_path("joystick_csvs")
+    return aasis_data_path(JOYSTICK_CSVS)
 
 
 def aasis_ratings_csvs_path():
-    return aasis_data_path("ratings_csvs")
+    return aasis_data_path(RATINGS_CSVS)
 
 
 def wavs_path(sr=None):
     if isinstance(sr, type(None)):
-        return private_data_path("wavs")
-    return private_data_path("wavs") / f"sr{sr}"
+        return private_data_path(WAVS)
+    return private_data_path(WAVS) / f"sr{sr}"
 
 
 def annotation_eafs_path():
-    return private_data_path("annotation_eafs")
+    return private_data_path(ANNOTATION_EAFS)
 
 
 def csvs_path():
-    return private_data_path("csvs")
+    return private_data_path(CSVS)
 
 
 def mp4s_path():
-    return private_data_path("mp4s")
+    return private_data_path(MP4S)
 
 
 def pyfeat_csvs_path():
-    return private_data_path("pyfeat_csvs")
+    return private_data_path(PYFEAT_CSVS)
 
 
 def joystick_csvs_path():
-    return private_data_path("joystick_csvs")
+    return private_data_path(JOYSTICK_CSVS)
 
 
 def ratings_csvs_path():
-    return private_data_path("ratings_csvs")
+    return private_data_path(RATINGS_CSVS)
 
 
 def DL_npzs_path():
-    return private_data_path("DL_npzs")
+    return private_data_path(DL_NPZS)
 
 
 def summary_npys_path():
-    return private_data_path("summary_npys")
+    return private_data_path(SUMMMARY_NPYS)
 
 
 def special_data_path():
-    return private_data_path("special_data")
+    return private_data_path(SPECIAL_DATA)
 
 
 def figs_path():
-    return private_data_path("figs")
+    return private_data_path(FIGS)
 
 
 def output_csvs_path():
-    return private_data_path("output_csvs")
+    return private_data_path(OUTPUT_CSVS)
 
 def chart_pts_path():
-    return private_data_path("chart_pts")
+    return private_data_path(CHART_PTS)
 
 def label_csvs_path():
-    return private_data_path("label_csvs")
+    return private_data_path(LABEL_CSVS)
 
 def train_reports_path():
-    return private_data_path("train_reports")
+    return private_data_path(TRAIN_REPORTS)
 
 def torch_models_path():
-    return private_data_path("torch_models")
+    return private_data_path(TORCH_MODELS)
 
 def manifests_path():
-    return private_data_path("manifests")
+    return private_data_path(MANIFESTS)
 
+OVERALL_FOLDER = "overall"
+BEAUTIFED_FOLDER = "beautified"
+TEST_FOLDER = "test"
+SELECTINFO_FOLDER = "selectinfo"
 
 def list_dir_names(path, extension="*"):
     names = []
@@ -175,7 +199,7 @@ def read_metadata_from_path(path):
 def annotated_list():
     config = get_config_private()
     aasis_path = p.Path(config["paths"]["main_data"]["."])
-    eafs_path = aasis_path / config["paths"]["main_data"]["eafs"]
+    eafs_path = aasis_path / config["paths"]["main_data"][ANNOTATION_EAFS]
     annotation_list = []
     for eaf in eafs_path.glob("**/*.eaf"):
         annotation = eaf.stem
@@ -189,13 +213,13 @@ def get_csv_names_facial_features(name):
     session = get_related_session_for_file(
         name, use_defaults=False, pyfeat_csv_list=pyfeat_csv_list
     )
-    return session["pyfeat_csvs"]
+    return session[PYFEAT_CSVS]
 
 
 def get_wav_paths(name):
     wavs_list = wavs_path().glob("**/*.wav")
     session = get_related_session_for_file(name, use_defaults=False, wav_list=wavs_list)
-    return session["wavs"]
+    return session[WAVS]
 
 
 def get_csv_paths_joystick_discrete(eaf_name):
@@ -219,103 +243,14 @@ def get_csv_paths_joystick(name):
     session = get_related_session_for_file(
         name, use_defaults=False, joystick_csv_list=joystick_csv_list
     )
-    return session["joystick_csvs"]
+    return session[JOYSTICK_CSVS]
 
 def get_eaf_paths_annotation(name):
     eaf_list = annotation_eafs_path().glob("**/*.eaf")
     session = get_related_session_for_file(
         name, use_defaults=False, eaf_list=eaf_list
     )
-    return session["eafs"]
-
-
-# @deprecated("Use fuzzy sourcing instead")
-def source_annotated_data_discrete():
-    config = get_config_private()
-    aasis_path = p.Path(config["paths"]["main_data"]["."])
-    personal_path = p.Path(config["paths"]["personal_data"]["."])
-    eafs_src_path = aasis_eafs_path()
-    wavs_src_path = aasis_wavs_path()
-    csvs_src_path = aasis_csvs_path()
-    eafs_dst_path = annotation_eafs_path()
-    wavs_dst_path = wavs_path()
-    csvs_dst_path = csvs_path()
-
-    with open(personal_path / "copy_manifest.txt", "a") as manifest:
-        manifest.write(f"\nSTARTING discrete copy {datetime.now()}\n")
-        version = config["version"]
-        date = config["date"]
-        manifest.write(f"\tCONFIG: version {version} from {date}\n")
-        manifest.write(f"\tFROM: {aasis_path} TO: {personal_path}\n")
-        good = 0
-        new = 0
-        bad = 0
-        get_choice = -1
-        for annotation in annotated_list():
-            try:
-                # find eaf
-                eaf_annotation = "_".join(annotation.split("_")[:-1])
-                eaf_src_choices = sorted(
-                    eafs_src_path.glob(f"**/{eaf_annotation}*.eaf")
-                )
-                if len(eaf_src_choices) == 0:
-                    manifest.write(f"\t{annotation}: no eaf choices\n")
-
-                eaf_path = eaf_src_choices[get_choice]
-                # find wavs
-                wav_names, mp4_names = elant.get_wav_names(elan.Eaf(eaf_path))
-                wavs = []
-                for wav_name in wav_names:
-                    if not p.Path(wavs_dst_path / wav_name).exists():
-                        wav_src_choices = sorted(
-                            wavs_src_path.glob(f"**/{wav_name}")
-                        )  # lazy
-                        if len(wav_src_choices) > 0:
-                            wav = wav_src_choices[get_choice]
-                            wavs.append(wav)
-                        else:
-                            manifest.write(
-                                f"\t{annotation}: wav {wav_name} not found\n"
-                            )
-                # find csvs possibilities
-                csv_names = get_csv_paths_joystick_discrete(eaf_annotation)
-                csvs = []
-                for csv_name in csv_names:
-                    if not p.Path(csvs_dst_path / csv_name).exists():
-                        csv_src_choices = sorted(csvs_src_path.glob(f"**/{csv_name}"))
-                        if len(csv_src_choices) > 0:
-                            csv = csv_src_choices[get_choice]
-                            csvs.append(csv)
-                        else:
-                            pass
-                            # manifest.write(f"\t{annotation}: csv {csv_name} not found\n")
-
-                # copy
-                updated = 0
-                eaf = p.Path(eafs_dst_path / eaf_path.name)
-                if not eaf.exists():
-                    shutil.copy(eaf_path, eaf)
-                    manifest.write(f"\t{annotation}: eaf succeeded\n")
-                    updated += 1
-                for wav in wavs:
-                    shutil.copy(wav, wavs_dst_path / wav.name)
-                    manifest.write(f"\t{annotation}: wav succeeded\n")
-                    updated += 1
-                for csv in csvs:
-                    shutil.copy(csv, csvs_dst_path / csv.name)
-                    manifest.write(f"\t{annotation}: csv succeeded\n")
-                    updated += 1
-
-                if updated == 0:
-                    manifest.write(f"\t{annotation}: already existed\n")
-                else:
-                    new += updated
-                good += 1
-            except Exception as e:
-                manifest.write(f"\t{annotation}: failed\n\t\terror: {e}\n")
-                bad += 1
-        manifest.write(f"\tSTATS: good {good} bad {bad} new {new}\n")
-        manifest.write(f"FINISHING copy {datetime.now()}\n")
+    return session[ANNOTATION_EAFS]
 
 
 def check_configured(key_name, key_value):
@@ -378,10 +313,11 @@ def create_missing_folder_recursive(tgt):
     return True
 
 
-def copy_missing(src, tgt, overwrite=False):
+def copy_missing(src, tgt, overwrite=False, dryrun=False):
     if p.Path(tgt).exists() and not overwrite:
         return False
-    shutil.copy(src, tgt)
+    if not dryrun:
+        shutil.copy(src, tgt)
     return True
 
 
@@ -393,8 +329,12 @@ def remove_plural(word):
     return word
 
 
-def source_annotated_data_fuzzy(overwrite=False):
-    manifest = dl.ManifestSession("copy")
+def source_annotated_data_fuzzy(overwrite=False, dryrun=False):
+    namechange_config = get_config_namechange()
+    manifest_name = dl.COPY_TYPE
+    if dryrun:
+        manifest_name = f"{manifest_name}_dryrun"
+    manifest = dl.ManifestSession(manifest_name)
     manifest.start()
 
     sessions = get_aasis_sessions()
@@ -403,16 +343,21 @@ def source_annotated_data_fuzzy(overwrite=False):
             session = sessions[session_key]
             manifest.session_start(session["name"])
 
-            tags = ["eafs", "wavs", "csvs", "pyfeat_csvs", "joystick_csvs"]
+            tags = [ANNOTATION_EAFS, WAVS, CSVS, PYFEAT_CSVS, JOYSTICK_CSVS]
             for tag in tags:
                 tag_name = remove_plural(tag)
                 file_paths = session[tag]
                 file_dst_path = private_data_path(tag)
                 for file_path in file_paths:
+                    name = file_path.name
+                    if name in namechange_config:
+                        oldname = name
+                        name = namechange_config[name]
+                        manifest.write(f"Changed {oldname} to {name} based on config")
                     if copy_missing(
-                        file_path, file_dst_path / file_path.name, overwrite=overwrite
+                        file_path, file_dst_path / name, overwrite=overwrite, dryrun=dryrun
                     ):
-                        manifest.new_file(tag_name, file_path.name)
+                        manifest.new_file(tag_name, name)
 
             manifest.session_end()
         except Exception as e:
@@ -533,12 +478,12 @@ def get_related_session_for_file(
     joystick_csvs = get_newest_file_paths(joystick_csvs)
     return {
         "name": file_name,
-        "eafs": eafs,
-        "wavs": wavs,
-        "csvs": csvs,
-        "mp4s": mp4s,
-        "pyfeat_csvs": pyfeat_csvs,
-        "joystick_csvs": joystick_csvs,
+        ANNOTATION_EAFS: eafs,
+        WAVS: wavs,
+        CSVS: csvs,
+        MP4S: mp4s,
+        PYFEAT_CSVS: pyfeat_csvs,
+        JOYSTICK_CSVS: joystick_csvs,
     }
 
 
